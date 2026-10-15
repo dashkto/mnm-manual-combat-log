@@ -16,9 +16,19 @@ We are trying hard to stay on the right side of the game's rules, which forbid a
 
 If the developers ask us to change or stop, we will. Please don't contribute data collected any other way.
 
+## Using it in a browser
+
+Everything runs in your browser. There's nothing to install and no server; your data stays on your computer until you choose to send a CSV.
+
+1. On GitHub, click **Code → Download ZIP** and unzip it anywhere (or `git clone` the repo).
+2. Double-click `index.html` to open the logger. Keep the tab open next to the game, or on a second monitor.
+3. To analyze, open `analyze.html` (or follow the "analyzer" link in the logger) and drag CSV files onto it.
+
+Any modern browser works (Chrome, Edge, Firefox). The logger autosaves in the browser you use, so stick to one browser and download a CSV at the end of each session. Clearing browser data, or using a private window, loses unsaved swings.
+
 ## Logging
 
-1. Open `index.html` in a browser. It runs offline and autosaves in that browser.
+1. Open `index.html`.
 2. **Setup** tab: fill in your stats, skills, main-hand damage, the mob and its level, plus a short setup label (`base`, `dex+10`). Press **Apply**. Apply again whenever something changes; the `+1` buttons are for skill-ups.
 3. **Log** tab: type entries and press Enter.
 
@@ -42,16 +52,15 @@ Several entries per line work: `14 m 12 -22 -d`.
 
 ## Contributing
 
-Send your CSV to whoever is collecting, or put it in `data/`. File names include a session id, and `analyze.py` drops duplicate rows, so sending the same session twice is harmless.
+Send your CSV to whoever is collecting, or put it in `data/`. File names include a session id and the analyzer skips duplicate rows, so sending the same session twice is harmless.
 
 ## Analysis
 
-```
-python analyze.py
-python analyze.py --mob "a cinder worker" --mob-level 17 --compare base dex+10
-```
+Open `analyze.html` and drop in one or more CSVs, from you or anyone else.
 
-Gives per setup: your hit rate, avoid breakdown, average hit, and the same for the mob's swings on you, with 95% intervals. `--compare` adds differences, p-values and damage per swing.
+- **Filters:** pick a mob, mob level, contributor and hand. Compare setups against a single mob and level.
+- **By setup:** your hit rate, average hit and crit rate, plus the mob's hit rate and average hit on you, with 95% intervals.
+- **Compare:** choose a baseline setup and another one. Shows the difference in hit rate, miss/dodge/parry/block rates, average hit and damage per swing, with a 95% interval and p-value. If the interval spans zero, you need more data.
 
 ## Getting a clean answer
 

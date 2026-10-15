@@ -4,64 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>M&amp;M Combat Log</title>
-<style>
-:root{
-  --bg:#f3eee3;--panel:#fffaf0;--ink:#2b2418;--muted:#7a6c55;--line:#dccfb4;
-  --accent:#8a3b12;--accent-ink:#fff;--hit:#2f6b2f;--miss:#9a2f2f;--mob:#34508f;--chip:#efe5d0;--warn:#a06a00;
-}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#16130e;--panel:#211c15;--ink:#ece3d0;--muted:#a3957c;--line:#3b3328;
-  --accent:#e08a4f;--accent-ink:#1a1209;--hit:#86c986;--miss:#e58080;--mob:#93a9ea;--chip:#2d261c;--warn:#e0b050;
-}}
-:root[data-theme="dark"]{
-  --bg:#16130e;--panel:#211c15;--ink:#ece3d0;--muted:#a3957c;--line:#3b3328;
-  --accent:#e08a4f;--accent-ink:#1a1209;--hit:#86c986;--miss:#e58080;--mob:#93a9ea;--chip:#2d261c;--warn:#e0b050;
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,Segoe UI,sans-serif}
-header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
-h1{font:600 20px Georgia,serif;margin:0;color:var(--accent)}
-nav{display:flex;gap:4px;flex-wrap:wrap}
-nav button{background:none;border:1px solid transparent;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
-nav button[aria-selected="true"]{border-color:var(--line);background:var(--bg);color:var(--ink);font-weight:600}
-#status{margin-left:auto;color:var(--muted);font-size:13px}
-main{max-width:1000px;margin:0 auto;padding:16px}
-section[hidden]{display:none}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
-.card h2{font:600 15px Georgia,serif;margin:0 0 10px;color:var(--accent)}
-#entry{width:100%;font:22px ui-monospace,Consolas,monospace;padding:10px 12px;border:2px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
-#entry:focus{outline:none;border-color:var(--accent)}
-#entry.bad{border-color:var(--miss)}
-#msg{min-height:22px;margin-top:6px;font-size:13px;color:var(--muted)}
-#msg.bad{color:var(--miss)}
-.chips{display:flex;gap:6px;flex-wrap:wrap}
-.chip{background:var(--chip);border-radius:999px;padding:2px 10px;font:13px ui-monospace,Consolas,monospace}
-.p{color:var(--hit)}.m{color:var(--mob)}.x{color:var(--miss)}
-.grammar{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 16px;font-size:13px;color:var(--muted)}
-.grammar code{color:var(--ink);background:var(--chip);padding:0 5px;border-radius:4px}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.big{font:600 28px Georgia,serif}
-.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.kpi{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
-.kpi .l{font-size:12px;color:var(--muted)}
-.kpi .v{font:600 20px Georgia,serif}
-.kpi .s{font-size:12px;color:var(--muted)}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
-th{color:var(--muted);font-weight:600}
-.scroll{overflow-x:auto}
-button.act{background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:8px 14px;font:600 14px system-ui;cursor:pointer}
-button.sec{background:none;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font:inherit;cursor:pointer}
-button.mini{background:none;border:1px solid var(--line);color:var(--muted);border-radius:4px;padding:0 6px;cursor:pointer;font-size:12px}
-fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 12px;padding:8px 12px 12px}
-legend{color:var(--accent);font:600 13px Georgia,serif;padding:0 6px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 12px}
-label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:2px}
-label input{font:14px system-ui;padding:5px 7px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);width:100%}
-.inline{display:flex;gap:4px}
-#dirty{color:var(--warn);font-size:13px}
-.hint{font-size:13px;color:var(--muted)}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
@@ -126,7 +69,7 @@ label input{font:14px system-ui;padding:5px 7px;border:1px solid var(--line);bor
 <section id="tab-stats" hidden>
   <div class="card">
     <h2>All setups</h2>
-    <p class="hint">Main-hand melee only. Ranges are 95% intervals. Use <code>analyze.py</code> to compare setups and merge other people's files.</p>
+    <p class="hint">Main-hand melee only. Ranges are 95% intervals. To compare setups or combine other people's files, use the <a href="analyze.html">analyzer</a>.</p>
     <div class="scroll"><table id="statsTable"></table></div>
   </div>
 </section>
@@ -136,6 +79,7 @@ label input{font:14px system-ui;padding:5px 7px;border:1px solid var(--line);bor
     <h2>Export</h2>
     <p class="hint">One row per swing. Send the file to whoever is collecting, or drop it in the <code>data/</code> folder.</p>
     <div class="row"><button class="act" id="export">Download CSV</button><span class="hint" id="exportInfo"></span></div>
+    <p class="hint">Open the <a href="analyze.html">analyzer</a> and drop CSVs on it to compare setups.</p>
   </div>
   <div class="card">
     <h2>New session</h2>
@@ -145,6 +89,7 @@ label input{font:14px system-ui;padding:5px 7px;border:1px solid var(--line);bor
 </section>
 
 </main>
+<script src="stats.js"></script>
 <script>
 const SCHEMA = 1;
 const KEY = 'mnm-combat-log-v1';
@@ -278,22 +223,6 @@ $('apply').onclick = apply;
 function renderDirty(){ $('dirty').textContent = sameSetup(readForm(), cur()) ? '' : 'Unapplied changes'; }
 
 // ---------- stats ----------
-function wilson(k, n, z = 1.96){
-  if (!n) return [0, 0];
-  const p = k/n, d = 1 + z*z/n, c = p + z*z/(2*n), w = z*Math.sqrt(p*(1-p)/n + z*z/(4*n*n));
-  return [(c-w)/d, (c+w)/d];
-}
-function side(list){
-  const n = list.length, hits = list.filter(e => e.r === 'hit'), dm = hits.map(e => e.d);
-  const cnt = r => list.filter(e => e.r === r).length;
-  const mean = dm.length ? dm.reduce((a,b) => a+b, 0) / dm.length : 0;
-  const sd = dm.length > 1 ? Math.sqrt(dm.reduce((a,b) => a + (b-mean)**2, 0) / (dm.length-1)) : 0;
-  const sorted = [...dm].sort((a,b) => a-b);
-  return {n, hits: hits.length, rate: n ? hits.length/n : 0, ci: wilson(hits.length, n),
-    miss: cnt('miss'), dodge: cnt('dodge'), parry: cnt('parry'), block: cnt('block'),
-    crits: hits.filter(e => e.c).length, mean, half: dm.length > 1 ? 1.96*sd/Math.sqrt(dm.length) : 0,
-    median: sorted.length ? sorted[Math.floor((sorted.length-1)/2)] : 0, max: sorted.length ? sorted[sorted.length-1] : 0};
-}
 const groupKey = s => `${s.setup_label}|${s.mob_name}|${s.mob_level}`;
 function groups(){
   const byId = Object.fromEntries(S.setups.map(s => [s.id, s]));
@@ -306,9 +235,6 @@ function groups(){
   }
   return g;
 }
-const pct = x => (100*x).toFixed(1) + '%';
-const rng = ci => `${(100*ci[0]).toFixed(0)}–${(100*ci[1]).toFixed(0)}%`;
-
 function render(){
   const s = cur();
   const fightEvs = S.events.filter(e => e.f === S.fight);

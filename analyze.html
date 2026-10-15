@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M&amp;M Combat Analysis</title>
+<link rel="stylesheet" href="style.css">
+<style>
+#drop{border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--muted);cursor:pointer}
+#drop.over{border-color:var(--accent);color:var(--ink)}
+select{font:14px system-ui;padding:5px 7px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);width:100%}
+label.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:var(--ink)}
+label.check input{width:auto}
+.good{color:var(--hit)}.warn{color:var(--warn)}
+td.num,th.num{text-align:right}
+</style>
+</head>
+<body>
+<header>
+  <h1>M&amp;M Combat Analysis</h1>
+  <a href="index.html" class="hint">← Logger</a>
+  <div id="status"></div>
+</header>
+<main>
+
+<div class="card">
+  <h2>Data</h2>
+  <div id="drop">Drop combat log CSVs here, or click to choose files</div>
+  <input type="file" id="file" accept=".csv,text/csv" multiple hidden>
+  <p class="hint" id="loaded">No files loaded.</p>
+</div>
+
+<div class="card">
+  <h2>Filters</h2>
+  <div class="grid">
+    <label>Mob<select id="fMob"></select></label>
+    <label>Mob level<select id="fLevel"></select></label>
+    <label>Contributor<select id="fWho"></select></label>
+    <label>Hand<select id="fHand"><option value="main">Main hand</option><option value="off">Offhand</option><option value="any">Both</option></select></label>
+    <label class="check"><input type="checkbox" id="fAbil"> Include abilities</label>
+  </div>
+</div>
+
+<div class="card">
+  <h2>By setup</h2>
+  <p class="hint">Ranges are 95% intervals.</p>
+  <div class="scroll"><table id="summary"></table></div>
+</div>
+
+<div class="card">
+  <h2>Compare</h2>
+  <div class="grid" style="margin-bottom:10px">
+    <label>Setup A (baseline)<select id="cA"></select></label>
+    <label>Setup B<select id="cB"></select></label>
+  </div>
+  <div id="compare"></div>
+  <p class="hint">Diff is B minus A with a 95% interval. A p-value under 0.05 means the difference is unlikely to be chance; if the interval spans zero, there isn't enough data yet.</p>
+</div>
+
+</main>
+<script src="stats.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const DEDUP = ['session_id','ts','fight','actor','kind','hand','result','damage'];
+let rows = [], files = [], dupes = 0;
+const seen = new Set();
+
+// ---------- loading ----------
+function toSwing(r){
+  return {...r, a: r.actor === 'player' ? 'p' : 'm', k: r.kind, h: r.hand, r: r.result,
+    d: r.result === 'hit' ? Number(r.damage) : '', c: r.crit === '1' ? 1 : 0};
+}
+async function addFiles(list){
+  for (const f of list) {
+    for (const r of parseCSV(await f.text())) {
+      const key = DEDUP.map(c => r[c]).join('|');
+      if (seen.has(key)) { dupes++; continue; }
+      seen.add(key); rows.push(toSwing(r));
+    }
+    files.push(f.name);
+  }
+  $('loaded').textContent = `${files.length} file(s), ${rows.length} swings` + (dupes ? `, ${dupes} duplicate rows skipped` : '') + '.';
+  fillFilters(); render();
+}
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => addFiles(e.target.files);
+$('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
+$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondrop = e => { e.preventDefault(); $('drop').classList.remove('over'); addFiles(e.dataTransfer.files); };
+
+// ---------- filters ----------
+const uniq = (list, f) => [...new Set(list.map(f))].filter(v => v !== '').sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+function setOptions(sel, values, allLabel){
+  const prev = sel.value;
+  sel.innerHTML = (allLabel ? `<option value="">${allLabel}</option>` : '') +
+    values.map(v => `<option>${v.replace(/</g,'&lt;')}</option>`).join('');
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+function fillFilters(){
+  setOptions($('fMob'), uniq(rows, r => r.mob_name), 'All mobs');
+  setOptions($('fLevel'), uniq(rows, r => r.mob_level), 'All levels');
+  setOptions($('fWho'), uniq(rows, r => r.contributor), 'Everyone');
+}
+function filtered(){
+  const mob = $('fMob').value, lvl = $('fLevel').value, who = $('fWho').value, hand = $('fHand').value, abil = $('fAbil').checked;
+  return rows.filter(r => (abil || r.k === 'melee') && (hand === 'any' || r.h === hand)
+    && (!mob || r.mob_name === mob) && (!lvl || r.mob_level === lvl) && (!who || r.contributor === who));
+}
+['fMob','fLevel','fWho','fHand','fAbil','cA','cB'].forEach(id => $(id).onchange = render);
+
+// ---------- render ----------
+const esc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const fmtRate = s => s.n ? `${pct(s.rate)} <span class="hint">${rng(s.ci)}</span>` : '–';
+const fmtDmg = s => s.hits ? `${s.mean.toFixed(1)} <span class="hint">±${s.half.toFixed(1)}</span>` : '–';
+
+function render(){
+  const data = filtered();
+  $('status').textContent = rows.length ? `${data.length} swings after filters` : '';
+
+  const groups = new Map();
+  for (const r of data) {
+    const k = `${r.setup_label}|${r.mob_name}|${r.mob_level}`;
+    if (!groups.has(k)) groups.set(k, {r, p: [], m: [], fights: new Set()});
+    groups.get(k)[r.a].push(r); groups.get(k).fights.add(r.session_id + ':' + r.fight);
+  }
+  const sorted = [...groups.values()].sort((x,y) => (x.r.setup_label + x.r.mob_name).localeCompare(y.r.setup_label + y.r.mob_name));
+  $('summary').innerHTML = `<tr><th>Setup</th><th>Mob</th><th class="num">Fights</th><th class="num">Your swings</th><th>Hit %</th><th>Avg hit</th>
+    <th>Crit</th><th class="num">Mob swings</th><th>Mob hit %</th><th>Mob avg hit</th></tr>` + (sorted.length ? sorted.map(g => {
+      const p = side(g.p), m = side(g.m);
+      return `<tr><td>${esc(g.r.setup_label)}</td><td>${esc(g.r.mob_name)} L${esc(g.r.mob_level)}</td><td class="num">${g.fights.size}</td>
+        <td class="num">${p.n}</td><td>${fmtRate(p)}</td><td>${fmtDmg(p)}</td><td>${p.hits ? pct(p.crits/p.hits) : '–'}</td>
+        <td class="num">${m.n}</td><td>${fmtRate(m)}</td><td>${fmtDmg(m)}</td></tr>`;
+    }).join('') : '<tr><td class="hint" colspan="10">No data.</td></tr>');
+
+  const labels = uniq(data, r => r.setup_label);
+  setOptions($('cA'), labels);
+  setOptions($('cB'), labels);
+  if (labels.length > 1 && $('cA').value === $('cB').value) $('cB').value = labels.find(l => l !== $('cA').value);
+  renderCompare(data);
+}
+
+function renderCompare(data){
+  const A = $('cA').value, B = $('cB').value;
+  if (!A || !B || A === B) { $('compare').innerHTML = '<p class="hint">Load data with at least two setup labels.</p>'; return; }
+  const pick = label => data.filter(r => r.setup_label === label);
+  const mobs = new Set(data.filter(r => r.setup_label === A || r.setup_label === B).map(r => r.mob_name + ' L' + r.mob_level));
+  const warn = mobs.size > 1 ? `<p class="warn">These setups mix ${mobs.size} mob/level combinations. Pick one mob and level above to hold the target fixed.</p>` : '';
+  $('compare').innerHTML = warn + block('Your swings', pick(A).filter(r => r.a === 'p'), pick(B).filter(r => r.a === 'p'), A, B)
+    + block('Mob swings on you', pick(A).filter(r => r.a === 'm'), pick(B).filter(r => r.a === 'm'), A, B);
+}
+
+function block(title, listA, listB, A, B){
+  const a = side(listA), b = side(listB);
+  const sig = c => c ? `<span class="${c.p < 0.05 ? 'good' : 'hint'}">p=${c.p.toFixed(3)}</span>` : '';
+  const ptsCI = c => c ? `${(100*c.diff).toFixed(1)} pts <span class="hint">[${(100*c.lo).toFixed(1)}, ${(100*c.hi).toFixed(1)}]</span>` : '–';
+  const numCI = c => c ? `${c.diff.toFixed(1)} <span class="hint">[${c.lo.toFixed(1)}, ${c.hi.toFixed(1)}]</span>` : '–';
+  const share = (s, k) => s.n ? pct(s[k]/s.n) : '–';
+  const perSwing = s => s.n ? s.mean * s.rate : 0;
+  const rate = compareRates(a, b), mean = compareMeans(a, b);
+  const row = (m, va, vb, diff = '', p = '') => `<tr><td>${m}</td><td class="num">${va}</td><td class="num">${vb}</td><td>${diff}</td><td>${p}</td></tr>`;
+  const avoid = ['miss','dodge','parry','block'].filter(k => a[k] || b[k]).map(k => row('&nbsp;&nbsp;' + k, share(a,k), share(b,k))).join('');
+  const ea = perSwing(a), eb = perSwing(b);
+  return `<h2 style="margin-top:14px">${title}</h2><div class="scroll"><table>
+    <tr><th>Metric</th><th class="num">${esc(A)}</th><th class="num">${esc(B)}</th><th>Diff</th><th></th></tr>
+    ${row('Swings', a.n, b.n)}
+    ${row('Hit rate', a.n ? pct(a.rate) : '–', b.n ? pct(b.rate) : '–', ptsCI(rate), sig(rate))}
+    ${avoid}
+    ${row('Avg hit', a.hits ? a.mean.toFixed(1) : '–', b.hits ? b.mean.toFixed(1) : '–', numCI(mean), sig(mean))}
+    ${row('Median / max hit', a.hits ? `${a.median} / ${a.max}` : '–', b.hits ? `${b.median} / ${b.max}` : '–')}
+    ${row('Damage per swing', a.n ? ea.toFixed(2) : '–', b.n ? eb.toFixed(2) : '–', ea && b.n ? `${(100*(eb/ea-1)).toFixed(1)}%` : '')}
+  </table></div>`;
+}
+
+render();
+</script>
+</body>
+</html>
