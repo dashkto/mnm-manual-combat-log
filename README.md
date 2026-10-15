@@ -4,7 +4,7 @@ Hand-entered combat data for working out what stats and skills do in Monsters an
 
 ## Why
 
-The game doesn't publish its combat formulas, so questions like "what does +5 DEX do to my hit rate?" or "how much does AGI cut the hits I take?" have no answers beyond gut feel. This project collects swing-by-swing results from controlled tests (same mob, one change at a time) and turns them into hit rates, avoidance rates and average damage with honest error bars. Several people logging the same way adds up to answers none of us could get alone.
+The game doesn't publish its combat formulas, so questions like "what does +5 DEX do to my hit rate?" or "how much does AGI cut the hits I take?" have no answers beyond gut feel. This project collects swing-by-swing results from controlled tests (same mob, one change at a time) and turns them into hit rates and average damage with honest error bars. Several people logging the same way adds up to answers none of us could get alone.
 
 ## Staying within the terms of service
 
@@ -35,41 +35,58 @@ Any modern browser works (Chrome, Edge, Firefox). The logger autosaves in the br
 | Entry | Meaning |
 |---|---|
 | `14` | you hit for 14 |
-| `m` | you miss |
-| `d` `p` `b` | mob dodges / parries / blocks |
+| `m` | you miss (dodges, parries and blocks count as misses) |
 | `-22` | mob hits you for 22 |
 | `-m` | mob misses you |
-| `-d` `-p` `-b` | you dodge / parry / block |
-| `14c` | critical hit |
-| `o14`, `om` | offhand swing |
-| `a30` | ability hit (excluded from melee stats) |
 | `n` | next fight |
 | `u` | undo last entry |
 
-Several entries per line work: `14 m 12 -22 -d`.
+Several entries per line work: `14 m 12 -22 -m`.
 
 4. **Data** tab: **Download CSV**.
 
 ## Contributing
 
-Send your CSV to whoever is collecting, or put it in `data/`. File names include a session id and the analyzer skips duplicate rows, so sending the same session twice is harmless.
+Logs are added by pull request and reviewed before merging.
+
+1. Download your CSV from the logger's **Data** tab. Don't rename or edit it.
+2. On GitHub, open the `data/` folder and click **Add file → Upload files**. GitHub forks the repo for you.
+3. Drop in your CSV and choose **Create a new branch … and start a pull request**. The CSV holds everything needed; no description required.
+
+Only manually entered logs are accepted (see [Staying within the terms of service](#staying-within-the-terms-of-service)).
 
 ## Analysis
 
 Open `analyze.html` and drop in one or more CSVs, from you or anyone else.
 
-- **Filters:** pick a mob, mob level, contributor and hand. Compare setups against a single mob and level.
-- **By setup:** your hit rate, average hit and crit rate, plus the mob's hit rate and average hit on you, with 95% intervals.
-- **Compare:** choose a baseline setup and another one. Shows the difference in hit rate, miss/dodge/parry/block rates, average hit and damage per swing, with a 95% interval and p-value. If the interval spans zero, you need more data.
+- **Filters:** pick a mob, mob level and contributor. Compare setups against a single mob and level.
+- **By setup:** your hit rate and average hit, plus the mob's hit rate and average hit on you, with 95% intervals.
+- **Compare:** choose a baseline setup and another one. Shows the difference in hit rate, average hit and damage per swing, with a 95% interval and p-value. If the interval spans zero, you need more data.
 
 ## Getting a clean answer
 
-- Change one thing between setups. Keep weapon, buffs and mob level fixed.
+- Change one thing between setups. Keep weapon and mob level fixed.
+- Follow the assumptions below.
 - Alternate setups (A, B, A, B) instead of all A then all B.
 - Weapon skill rises while you fight. Use a capped skill if you can; otherwise press `+1` on every skill-up so it gets recorded.
-- Log melee only. Spells, songs and procs muddy the numbers; log abilities with `a` if at all.
 - Swings needed per setup to detect a change in hit rate (around 70%): 10 points ≈ 300, 5 points ≈ 1,300, 2 points ≈ 8,000. Bigger stat changes are much cheaper to detect than +5.
+
+## Assumptions and deferrals
+
+To keep logs comparable without extra fields, every log assumes:
+
+- **Front only.** You fight from the mob's front; it's assumed to be in front of you at all times.
+- **No mob debuffs.** Fights where the mob has any debuff (slow, AC debuff and so on) are not logged.
+- **Buffs on you don't matter.** Enter stats and skills as the game shows them, buffs included.
+- **Class and race bonuses** are assumed to show up in your skills and attributes, so class isn't recorded.
+
+Deferred for now, may come back later:
+
+- **Offhand.** Offhand swings aren't logged.
+- **Abilities.** Only auto-attack swings are logged; skip combat abilities, spells, songs and procs.
+- **Crits.** Not marked. A critical hit is entered as a normal hit with its damage.
+- **Dodge, parry and block.** Logged as misses, on both sides, so avoidance types aren't broken out and your own dodge/parry/block skills aren't recorded.
 
 ## CSV columns
 
-One row per swing: `schema_version, session_id, setup_version, fight, ts, actor (player|mob), kind (melee|ability), hand (main|off), result (hit|miss|dodge|parry|block), damage, crit`, followed by the setup in force at that swing: `contributor, setup_label, char_race, char_level, str, agi, dex, ac, weapon_skill, offense, defense, weapon_dmg, notes, mob_name, mob_level`. Offhand swings are assumed to use the same weapon skill as the main hand.
+One row per swing: `schema_version, session_id, seq (swing number within the session), setup_version, fight, ts, actor (player|mob), result (hit|miss), damage`, followed by the setup in force at that swing: `contributor, setup_label, char_race, char_level, str, agi, dex, ac, weapon_skill, offense, defense, weapon_dmg, notes, mob_name, mob_level`.

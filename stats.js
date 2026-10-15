@@ -1,4 +1,4 @@
-// Shared by index.html and analyze.html. Swing shape: {a:'p'|'m', k:'melee'|'ability', h:'main'|'off', r, d, c}.
+// Shared by index.html and analyze.html. Swing shape: {a:'p'|'m', r:'hit'|'miss', d}.
 
 function wilson(k, n, z = 1.96){
   if (!n) return [0, 0];
@@ -12,13 +12,11 @@ function variance(xs, mean){
 
 function side(list){
   const n = list.length, hits = list.filter(e => e.r === 'hit'), dm = hits.map(e => e.d);
-  const cnt = r => list.filter(e => e.r === r).length;
   const mean = dm.length ? dm.reduce((a,b) => a+b, 0) / dm.length : 0;
   const v = variance(dm, mean);
   const sorted = [...dm].sort((a,b) => a-b);
   return {n, hits: hits.length, rate: n ? hits.length/n : 0, ci: wilson(hits.length, n),
-    miss: cnt('miss'), dodge: cnt('dodge'), parry: cnt('parry'), block: cnt('block'),
-    crits: hits.filter(e => e.c).length, mean, variance: v, half: dm.length > 1 ? 1.96*Math.sqrt(v/dm.length) : 0,
+    mean, variance: v, half: dm.length > 1 ? 1.96*Math.sqrt(v/dm.length) : 0,
     median: sorted.length ? sorted[Math.floor((sorted.length-1)/2)] : 0, max: sorted.length ? sorted[sorted.length-1] : 0};
 }
 

@@ -36,8 +36,6 @@ td.num,th.num{text-align:right}
     <label>Mob<select id="fMob"></select></label>
     <label>Mob level<select id="fLevel"></select></label>
     <label>Contributor<select id="fWho"></select></label>
-    <label>Hand<select id="fHand"><option value="main">Main hand</option><option value="off">Offhand</option><option value="any">Both</option></select></label>
-    <label class="check"><input type="checkbox" id="fAbil"> Include abilities</label>
   </div>
 </div>
 
@@ -61,14 +59,13 @@ td.num,th.num{text-align:right}
 <script src="stats.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const DEDUP = ['session_id','ts','fight','actor','kind','hand','result','damage'];
+const DEDUP = ['session_id','seq'];
 let rows = [], files = [], dupes = 0;
 const seen = new Set();
 
 // ---------- loading ----------
 function toSwing(r){
-  return {...r, a: r.actor === 'player' ? 'p' : 'm', k: r.kind, h: r.hand, r: r.result,
-    d: r.result === 'hit' ? Number(r.damage) : '', c: r.crit === '1' ? 1 : 0};
+  return {...r, a: r.actor === 'player' ? 'p' : 'm', r: r.result, d: r.result === 'hit' ? Number(r.damage) : ''};
 }
 async function addFiles(list){
   for (const f of list) {
@@ -102,11 +99,10 @@ function fillFilters(){
   setOptions($('fWho'), uniq(rows, r => r.contributor), 'Everyone');
 }
 function filtered(){
-  const mob = $('fMob').value, lvl = $('fLevel').value, who = $('fWho').value, hand = $('fHand').value, abil = $('fAbil').checked;
-  return rows.filter(r => (abil || r.k === 'melee') && (hand === 'any' || r.h === hand)
-    && (!mob || r.mob_name === mob) && (!lvl || r.mob_level === lvl) && (!who || r.contributor === who));
+  const mob = $('fMob').value, lvl = $('fLevel').value, who = $('fWho').value;
+  return rows.filter(r => (!mob || r.mob_name === mob) && (!lvl || r.mob_level === lvl) && (!who || r.contributor === who));
 }
-['fMob','fLevel','fWho','fHand','fAbil','cA','cB'].forEach(id => $(id).onchange = render);
+['fMob','fLevel','fWho','cA','cB'].forEach(id => $(id).onchange = render);
 
 // ---------- render ----------
 const esc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
@@ -125,12 +121,12 @@ function render(){
   }
   const sorted = [...groups.values()].sort((x,y) => (x.r.setup_label + x.r.mob_name).localeCompare(y.r.setup_label + y.r.mob_name));
   $('summary').innerHTML = `<tr><th>Setup</th><th>Mob</th><th class="num">Fights</th><th class="num">Your swings</th><th>Hit %</th><th>Avg hit</th>
-    <th>Crit</th><th class="num">Mob swings</th><th>Mob hit %</th><th>Mob avg hit</th></tr>` + (sorted.length ? sorted.map(g => {
+    <th class="num">Mob swings</th><th>Mob hit %</th><th>Mob avg hit</th></tr>` + (sorted.length ? sorted.map(g => {
       const p = side(g.p), m = side(g.m);
       return `<tr><td>${esc(g.r.setup_label)}</td><td>${esc(g.r.mob_name)} L${esc(g.r.mob_level)}</td><td class="num">${g.fights.size}</td>
-        <td class="num">${p.n}</td><td>${fmtRate(p)}</td><td>${fmtDmg(p)}</td><td>${p.hits ? pct(p.crits/p.hits) : '–'}</td>
+        <td class="num">${p.n}</td><td>${fmtRate(p)}</td><td>${fmtDmg(p)}</td>
         <td class="num">${m.n}</td><td>${fmtRate(m)}</td><td>${fmtDmg(m)}</td></tr>`;
-    }).join('') : '<tr><td class="hint" colspan="10">No data.</td></tr>');
+    }).join('') : '<tr><td class="hint" colspan="9">No data.</td></tr>');
 
   const labels = uniq(data, r => r.setup_label);
   setOptions($('cA'), labels);
@@ -154,17 +150,14 @@ function block(title, listA, listB, A, B){
   const sig = c => c ? `<span class="${c.p < 0.05 ? 'good' : 'hint'}">p=${c.p.toFixed(3)}</span>` : '';
   const ptsCI = c => c ? `${(100*c.diff).toFixed(1)} pts <span class="hint">[${(100*c.lo).toFixed(1)}, ${(100*c.hi).toFixed(1)}]</span>` : '–';
   const numCI = c => c ? `${c.diff.toFixed(1)} <span class="hint">[${c.lo.toFixed(1)}, ${c.hi.toFixed(1)}]</span>` : '–';
-  const share = (s, k) => s.n ? pct(s[k]/s.n) : '–';
   const perSwing = s => s.n ? s.mean * s.rate : 0;
   const rate = compareRates(a, b), mean = compareMeans(a, b);
   const row = (m, va, vb, diff = '', p = '') => `<tr><td>${m}</td><td class="num">${va}</td><td class="num">${vb}</td><td>${diff}</td><td>${p}</td></tr>`;
-  const avoid = ['miss','dodge','parry','block'].filter(k => a[k] || b[k]).map(k => row('&nbsp;&nbsp;' + k, share(a,k), share(b,k))).join('');
   const ea = perSwing(a), eb = perSwing(b);
   return `<h2 style="margin-top:14px">${title}</h2><div class="scroll"><table>
     <tr><th>Metric</th><th class="num">${esc(A)}</th><th class="num">${esc(B)}</th><th>Diff</th><th></th></tr>
     ${row('Swings', a.n, b.n)}
     ${row('Hit rate', a.n ? pct(a.rate) : '–', b.n ? pct(b.rate) : '–', ptsCI(rate), sig(rate))}
-    ${avoid}
     ${row('Avg hit', a.hits ? a.mean.toFixed(1) : '–', b.hits ? b.mean.toFixed(1) : '–', numCI(mean), sig(mean))}
     ${row('Median / max hit', a.hits ? `${a.median} / ${a.max}` : '–', b.hits ? `${b.median} / ${b.max}` : '–')}
     ${row('Damage per swing', a.n ? ea.toFixed(2) : '–', b.n ? eb.toFixed(2) : '–', ea && b.n ? `${(100*(eb/ea-1)).toFixed(1)}%` : '')}

@@ -37,17 +37,12 @@
     <h2>Entry keys</h2>
     <div class="grammar">
       <div><code>14</code> you hit for 14</div>
-      <div><code>m</code> you miss</div>
-      <div><code>d</code> <code>p</code> <code>b</code> mob dodges / parries / blocks</div>
+      <div><code>m</code> you miss (incl. dodge / parry / block)</div>
       <div><code>-22</code> mob hits you for 22</div>
-      <div><code>-m</code> mob misses you</div>
-      <div><code>-d</code> <code>-p</code> <code>-b</code> you dodge / parry / block</div>
-      <div><code>14c</code> critical hit</div>
-      <div><code>o14</code> <code>om</code> offhand swing</div>
-      <div><code>a30</code> ability hit (kept out of melee stats)</div>
+      <div><code>-m</code> mob misses you (incl. dodge / parry / block)</div>
       <div><code>n</code> next fight &nbsp; <code>u</code> undo</div>
     </div>
-    <p class="hint">Several per line is fine: <code>14 m 12 -22 -d</code>.</p>
+    <p class="hint">Several per line is fine: <code>14 m 12 -22 -m</code>. Main hand only: skip offhand swings. Only log fights from the front with no debuffs on the mob.</p>
   </div>
   <div class="card">
     <h2>Recent</h2>
@@ -61,7 +56,7 @@
       <h2 style="margin:0">Setup</h2>
       <div class="row"><span id="dirty"></span><button class="act" id="apply">Apply</button></div>
     </div>
-    <p class="hint">Every logged swing records the setup that was applied at the time. Apply again after a skill-up, gear swap or new mob.</p>
+    <p class="hint">Every logged swing records the setup that was applied at the time. Apply again after a skill-up, gear swap or new mob. Enter stats as shown in game.</p>
     <form id="setupForm" onsubmit="return false"></form>
   </div>
 </section>
@@ -69,7 +64,7 @@
 <section id="tab-stats" hidden>
   <div class="card">
     <h2>All setups</h2>
-    <p class="hint">Main-hand melee only. Ranges are 95% intervals. To compare setups or combine other people's files, use the <a href="analyze.html">analyzer</a>.</p>
+    <p class="hint">Melee only. Ranges are 95% intervals. To compare setups or combine other people's files, use the <a href="analyze.html">analyzer</a>.</p>
     <div class="scroll"><table id="statsTable"></table></div>
   </div>
 </section>
@@ -91,7 +86,7 @@
 </main>
 <script src="stats.js"></script>
 <script>
-const SCHEMA = 1;
+const SCHEMA = 3;
 const KEY = 'mnm-combat-log-v1';
 
 // [field, label, type, group]
@@ -113,7 +108,7 @@ const FIELDS = [
   ['mob_level','Mob level','number','Target'],
 ];
 const BUMP = ['weapon_skill','offense','defense'];
-const RESULTS = {m:'miss',d:'dodge',p:'parry',b:'block'};
+const REQUIRED = ['contributor','setup_label','char_level','str','agi','dex','ac','weapon_skill','offense','defense','weapon_dmg','mob_name','mob_level'];
 
 let S = load() || {sessionId: rid(), fight: 1, setups: [], events: [], draft: {setup_label:'base'}};
 
@@ -124,40 +119,25 @@ const $ = id => document.getElementById(id);
 const cur = () => S.setups[S.setups.length-1];
 
 // ---------- parsing ----------
-// Token: [-][a][o](damage|m|d|p|b)[c], or n / u. Returns {actions, error}; actions are {ev} | {cmd}.
+// Token: [-](damage|m), or n / u. Returns {actions, error}; actions are {ev} | {cmd}.
 function parse(line){
   const actions = [];
   for (const t of line.toLowerCase().split(/[\s,]+/).filter(Boolean)) {
     if (t === 'n' || t === 'u') { actions.push({cmd: t}); continue; }
-    const m = t.match(/^(-?)(a?)(o?)(\d+|[mdpb])(c?)$/);
+    const m = t.match(/^(-?)(\d+|m)$/);
     if (!m) return {error: `Can't read "${t}"`};
-    const hit = /^\d+$/.test(m[4]);
-    if (m[5] && !hit) return {error: `"${t}": only hits can crit`};
-    actions.push({ev: {
-      a: m[1] ? 'm' : 'p',
-      k: m[2] ? 'ability' : 'melee',
-      h: m[3] ? 'off' : 'main',
-      r: hit ? 'hit' : RESULTS[m[4]],
-      d: hit ? parseInt(m[4],10) : '',
-      c: m[5] ? 1 : 0,
-    }});
+    const hit = m[2] !== 'm';
+    actions.push({ev: {a: m[1] ? 'm' : 'p', r: hit ? 'hit' : 'miss', d: hit ? parseInt(m[2],10) : ''}});
   }
   return {actions};
 }
 
 function describe(e){
   const who = e.a === 'p' ? 'You' : 'Mob';
-  const tag = (e.h === 'off' ? ' (offhand)' : '') + (e.k === 'ability' ? ' (ability)' : '') + (e.c ? ' CRIT' : '');
-  if (e.r === 'hit') return `${who} hit${e.a==='m'?'s you':''} for ${e.d}${tag}`;
-  if (e.r === 'miss') return `${who} miss${e.a==='m'?'es you':''}${tag}`;
-  const def = e.a === 'p' ? 'Mob' : 'You';
-  return `${def} ${e.r}${e.a==='p'?'s':''}${tag}`;
+  if (e.r === 'hit') return `${who} hit${e.a==='m'?'s you':''} for ${e.d}`;
+  return `${who} miss${e.a==='m'?'es you':''}`;
 }
-function chipText(e){
-  let s = (e.a==='m'?'-':'') + (e.k==='ability'?'a':'') + (e.h==='off'?'o':'');
-  s += e.r === 'hit' ? e.d : e.r[0];
-  return s + (e.c ? 'c' : '');
-}
+const chipText = e => (e.a==='m'?'-':'') + (e.r === 'hit' ? e.d : 'm');
 
 // ---------- entry ----------
 $('entry').addEventListener('keydown', ev => {
@@ -174,7 +154,8 @@ $('entry').addEventListener('keydown', ev => {
     if (a.cmd === 'n') { S.fight++; chips.push(`<span class="chip">next fight → ${S.fight}</span>`); }
     else if (a.cmd === 'u') { const e = S.events.pop(); chips.push(`<span class="chip x">undo ${e ? chipText(e) : '(nothing)'}</span>`); }
     else {
-      const e = {ts: new Date().toISOString(), f: S.fight, s: cur().id, ...a.ev};
+      S.seq = (S.seq || 0) + 1;
+      const e = {n: S.seq, ts: new Date().toISOString(), f: S.fight, s: cur().id, ...a.ev};
       S.events.push(e);
       chips.push(`<span class="chip ${e.a}">${chipText(e)}</span>`);
     }
@@ -214,8 +195,8 @@ function readForm(){
 const sameSetup = (a,b) => a && b && FIELDS.every(([f]) => (a[f] ?? '') === (b[f] ?? ''));
 function apply(){
   const d = readForm();
-  if (!d.setup_label) { alert('Give the setup a label first.'); return; }
-  if (!d.mob_name || !d.mob_level) { alert('Mob name and mob level are needed.'); return; }
+  const missing = FIELDS.filter(([f]) => REQUIRED.includes(f) && !d[f]).map(([, label]) => label);
+  if (missing.length) { alert('Fill in: ' + missing.join(', ')); return; }
   if (!sameSetup(d, cur())) S.setups.push({...d, id: S.setups.length + 1, applied: new Date().toISOString()});
   S.draft = d; save(); render();
 }
@@ -228,7 +209,6 @@ function groups(){
   const byId = Object.fromEntries(S.setups.map(s => [s.id, s]));
   const g = new Map();
   for (const e of S.events) {
-    if (e.k !== 'melee' || e.h !== 'main') continue;
     const s = byId[e.s], k = groupKey(s);
     if (!g.has(k)) g.set(k, {setup: s, p: [], m: [], fights: new Set()});
     g.get(k)[e.a].push(e); g.get(k).fights.add(e.f);
@@ -249,10 +229,8 @@ function render(){
   $('liveKpis').innerHTML = [
     kpi('Your hit rate', P.n ? pct(P.rate) : '–', P.n ? `${P.hits}/${P.n} · ${rng(P.ci)}` : 'no swings yet'),
     kpi('Your avg hit', P.hits ? P.mean.toFixed(1) : '–', P.hits ? `±${P.half.toFixed(1)} · max ${P.max}` : ''),
-    kpi('Mob avoids', P.n ? `${P.dodge}/${P.parry}/${P.block}` : '–', 'dodge / parry / block'),
     kpi('Mob hit rate on you', M.n ? pct(M.rate) : '–', M.n ? `${M.hits}/${M.n} · ${rng(M.ci)}` : 'no swings yet'),
     kpi('Mob avg hit', M.hits ? M.mean.toFixed(1) : '–', M.hits ? `±${M.half.toFixed(1)} · max ${M.max}` : ''),
-    kpi('You avoid', M.n ? `${M.dodge}/${M.parry}/${M.block}` : '–', 'dodge / parry / block'),
   ].join('');
 
   const recent = S.events.map((e,i) => [e,i]).slice(-40).reverse();
@@ -263,15 +241,14 @@ function render(){
 
   const rows = [...groups().values()];
   $('statsTable').innerHTML = `<tr><th>Setup</th><th>Mob</th><th>Fights</th><th>Your swings</th><th>Hit %</th><th>Avg hit</th>
-    <th>Crit</th><th>Mob swings</th><th>Mob hit %</th><th>Mob avg hit</th></tr>` + (rows.length ? rows.map(r => {
+    <th>Mob swings</th><th>Mob hit %</th><th>Mob avg hit</th></tr>` + (rows.length ? rows.map(r => {
       const p = side(r.p), m = side(r.m);
       return `<tr><td>${r.setup.setup_label}</td><td>${r.setup.mob_name} L${r.setup.mob_level}</td><td>${r.fights.size}</td>
         <td>${p.n}</td><td>${p.n ? pct(p.rate)+' <span class="hint">'+rng(p.ci)+'</span>' : '–'}</td>
         <td>${p.hits ? p.mean.toFixed(1)+' <span class="hint">±'+p.half.toFixed(1)+'</span>' : '–'}</td>
-        <td>${p.hits ? pct(p.crits/p.hits) : '–'}</td>
         <td>${m.n}</td><td>${m.n ? pct(m.rate)+' <span class="hint">'+rng(m.ci)+'</span>' : '–'}</td>
         <td>${m.hits ? m.mean.toFixed(1)+' <span class="hint">±'+m.half.toFixed(1)+'</span>' : '–'}</td></tr>`;
-    }).join('') : '<tr><td class="hint" colspan="10">No data yet.</td></tr>');
+    }).join('') : '<tr><td class="hint" colspan="9">No data yet.</td></tr>');
 
   $('exportInfo').textContent = `${S.events.length} rows · session ${S.sessionId}`;
   renderDirty();
@@ -283,7 +260,7 @@ $('recent').addEventListener('click', ev => {
 });
 
 // ---------- export ----------
-const COLS = ['schema_version','session_id','setup_version','fight','ts','actor','kind','hand','result','damage','crit',
+const COLS = ['schema_version','session_id','seq','setup_version','fight','ts','actor','result','damage',
   ...FIELDS.map(([f]) => f)];
 const esc = v => { v = String(v ?? ''); return /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v; };
 $('export').onclick = () => {
@@ -291,8 +268,8 @@ $('export').onclick = () => {
   const lines = [COLS.join(',')];
   for (const e of S.events) {
     const s = byId[e.s];
-    const row = {schema_version: SCHEMA, session_id: S.sessionId, setup_version: e.s, fight: e.f, ts: e.ts,
-      actor: e.a === 'p' ? 'player' : 'mob', kind: e.k, hand: e.h, result: e.r, damage: e.d, crit: e.c, ...s};
+    const row = {schema_version: SCHEMA, session_id: S.sessionId, seq: e.n, setup_version: e.s, fight: e.f, ts: e.ts,
+      actor: e.a === 'p' ? 'player' : 'mob', result: e.r, damage: e.d, ...s};
     lines.push(COLS.map(c => esc(row[c])).join(','));
   }
   const who = (cur()?.contributor || 'anon').replace(/[^\w-]+/g,'_');
