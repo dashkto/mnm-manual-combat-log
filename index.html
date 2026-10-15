@@ -12,7 +12,6 @@
   <nav role="tablist">
     <button data-tab="log" aria-selected="true">Log</button>
     <button data-tab="setup">Setup</button>
-    <button data-tab="stats">Stats</button>
     <button data-tab="data">Data</button>
   </nav>
   <div id="status"></div>
@@ -60,14 +59,6 @@
     </div>
     <p class="hint">Every logged swing records the setup that was applied at the time. Apply again after a skill-up, gear swap or new mob. Enter stats as shown in game.</p>
     <form id="setupForm" onsubmit="return false"></form>
-  </div>
-</section>
-
-<section id="tab-stats" hidden>
-  <div class="card">
-    <h2>All setups</h2>
-    <p class="hint">Melee only. Ranges are 95% intervals. To see what stats do across everyone's logs, use the <a href="analyze.html">analyzer</a>.</p>
-    <div class="scroll"><table id="statsTable"></table></div>
   </div>
 </section>
 
@@ -240,17 +231,6 @@ function render(){
     `<tr><td>#${e.f}</td><td class="${e.a}">${describe(e)}</td><td class="hint">${e.ts.slice(11,19)}</td>
      <td><button class="mini" data-del="${i}" title="Delete">✕</button></td></tr>`).join('')
     : '<tr><td class="hint">Nothing logged yet.</td></tr>';
-
-  const rows = [...groups().values()];
-  $('statsTable').innerHTML = `<tr><th>Setup</th><th>Mob</th><th>Fights</th><th>Your swings</th><th>Hit %</th><th>Avg hit</th>
-    <th>Mob swings</th><th>Mob hit %</th><th>Mob avg hit</th></tr>` + (rows.length ? rows.map(r => {
-      const p = side(r.p), m = side(r.m);
-      return `<tr><td>${r.setup.setup_label}</td><td>${r.setup.mob_name} L${r.setup.mob_level}</td><td>${r.fights.size}</td>
-        <td>${p.n}</td><td>${p.n ? pct(p.rate)+' <span class="hint">'+rng(p.ci)+'</span>' : '–'}</td>
-        <td>${p.hits ? p.mean.toFixed(1)+' <span class="hint">±'+p.half.toFixed(1)+'</span>' : '–'}</td>
-        <td>${m.n}</td><td>${m.n ? pct(m.rate)+' <span class="hint">'+rng(m.ci)+'</span>' : '–'}</td>
-        <td>${m.hits ? m.mean.toFixed(1)+' <span class="hint">±'+m.half.toFixed(1)+'</span>' : '–'}</td></tr>`;
-    }).join('') : '<tr><td class="hint" colspan="9">No data yet.</td></tr>');
 
   $('exportInfo').textContent = `${S.events.length} rows · session ${S.sessionId}`;
   renderDirty();
