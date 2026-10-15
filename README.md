@@ -1,0 +1,1 @@
+# mnm-manual-combat-log
