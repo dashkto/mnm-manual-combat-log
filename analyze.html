@@ -213,19 +213,16 @@ function renderEffects(data){
       if (p === null) return '<span class="hint">not tested</span>';
       return p < 0.05 ? `<span class="good">yes (p=${p.toFixed(3)})</span>` : `<span class="hint">no sign (p=${p.toFixed(3)})</span>`;
     };
-    // One row per mob level: the predicted outcome there, then what +1 of each stat changes it by.
+    // One row per mob level: what +1 of each stat changes the outcome by there.
     const what = M.logistic ? 'hit chance' : 'avg hit';
-    const outcome = l => {
-      const pr = predict(fit, {...typical, mob_level: l});
-      return `<td class="num" title="95% range ${fmtv(pr.lo, M.logistic)} to ${fmtv(pr.hi, M.logistic)}">${fmtv(pr.y, M.logistic)} <span class="hint">±${fmtv((pr.hi - pr.lo)/2, M.logistic)}</span></td>`;
-    };
     const cell = (v, l) => {
-      const sl = step(fit, v, {...typical, mob_level: l});
-      return `<td class="num ${sl.p < 0.05 ? 'good' : ''}" title="95% range ${fmt(sl.lo)} to ${fmt(sl.hi)}, p=${sl.p.toFixed(3)}">${fmt(sl.effect)} <span class="hint">±${fmt((sl.hi - sl.lo)/2).replace(/^\+/, '')}</span></td>`;
+      const x = {...typical, mob_level: l}, sl = step(fit, v, x);
+      const from = predict(fit, x).y, to = predict(fit, {...x, [v]: x[v] + 1}).y;
+      return `<td class="num ${sl.p < 0.05 ? 'good' : ''}" title="${FACTORS[v]} ${x[v]} → ${x[v] + 1}: ${fmtv(from, M.logistic)} → ${fmtv(to, M.logistic)}. 95% range ${fmt(sl.lo)} to ${fmt(sl.hi)}, p=${sl.p.toFixed(3)}">${fmt(sl.effect)} <span class="hint">±${fmt((sl.hi - sl.lo)/2).replace(/^\+/, '')}</span></td>`;
     };
-    const table = fit.beta ? `<div class="scroll"><table><tr><th>Mob level</th><th class="num">${M.logistic ? 'Hit chance' : 'Avg hit'}</th>${stats.map(v => `<th class="num">Change in ${what} per +1 ${FACTORS[v]}</th>`).join('')}</tr>${
-      levels.map(l => `<tr><td>L${l}</td>${outcome(l)}${stats.map(v => cell(v, l)).join('')}</tr>`).join('')
-    }${stats.length ? `<tr><td>Changes with mob level?</td><td></td>${stats.map(v => `<td class="num">${dep(v)}</td>`).join('')}</tr>` : ''}</table></div>` : '';
+    const table = fit.beta ? `<div class="scroll"><table><tr><th>Mob level</th>${stats.map(v => `<th class="num">Change in ${what} per +1 ${FACTORS[v]}</th>`).join('')}</tr>${
+      levels.map(l => `<tr><td>L${l}</td>${stats.map(v => cell(v, l)).join('')}</tr>`).join('')
+    }${stats.length ? `<tr><td>Changes with mob level?</td>${stats.map(v => `<td class="num">${dep(v)}</td>`).join('')}</tr>` : ''}</table></div>` : '';
 
     const notes = [
       fit.error,
