@@ -13,6 +13,14 @@ label.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:v
 label.check input{width:auto}
 .good{color:var(--hit)}.warn{color:var(--warn)}
 td.num,th.num{text-align:right}
+.charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin:8px 0 12px}
+.chart{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.chart h3{font:600 13px system-ui;margin:0 0 4px}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:4px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.model{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.model:first-of-type{border-top:0;margin-top:0;padding-top:0}
 </style>
 </head>
 <body>
@@ -27,7 +35,7 @@ td.num,th.num{text-align:right}
   <h2>Data</h2>
   <div id="drop">Drop combat log CSVs here, or click to choose files</div>
   <input type="file" id="file" accept=".csv,text/csv" multiple hidden>
-  <p class="hint" id="loaded">No files loaded.</p>
+  <div class="row" style="margin-top:10px"><button class="sec" id="loadRepo">Load all logs from the repo</button><span class="hint" id="loaded">No files loaded.</span></div>
 </div>
 
 <div class="card">
@@ -46,13 +54,9 @@ td.num,th.num{text-align:right}
 </div>
 
 <div class="card">
-  <h2>Compare</h2>
-  <div class="grid" style="margin-bottom:10px">
-    <label>Setup A (baseline)<select id="cA"></select></label>
-    <label>Setup B<select id="cB"></select></label>
-  </div>
-  <div id="compare"></div>
-  <p class="hint">Diff is B minus A with a 95% interval. A p-value under 0.05 means the difference is unlikely to be chance; if the interval spans zero, there isn't enough data yet.</p>
+  <h2>Effects</h2>
+  <p class="hint">Pools every swing loaded and fits each outcome to the factors assumed to drive it, plus mob level. Lines are the fitted model with the other factors held at typical values, one per mob level; the shaded band is its 95% range. Dots are raw averages (not held equal), to show how well the model fits. Factors that never change in the data can't be measured.</p>
+  <div id="effects"></div>
 </div>
 
 </main>
@@ -67,18 +71,38 @@ const seen = new Set();
 function toSwing(r){
   return {...r, a: r.actor === 'player' ? 'p' : 'm', r: r.result, d: r.result === 'hit' ? Number(r.damage) : ''};
 }
-async function addFiles(list){
-  for (const f of list) {
-    for (const r of parseCSV(await f.text())) {
+function addTexts(list){
+  for (const {name, text} of list) {
+    for (const r of parseCSV(text)) {
       const key = DEDUP.map(c => r[c]).join('|');
       if (seen.has(key)) { dupes++; continue; }
       seen.add(key); rows.push(toSwing(r));
     }
-    files.push(f.name);
+    files.push(name);
   }
   $('loaded').textContent = `${files.length} file(s), ${rows.length} swings` + (dupes ? `, ${dupes} duplicate rows skipped` : '') + '.';
   fillFilters(); render();
 }
+async function addFiles(list){
+  addTexts(await Promise.all([...list].map(async f => ({name: f.name, text: await f.text()}))));
+}
+function repoSlug(){
+  const h = location.hostname;
+  return h.endsWith('.github.io') ? [h.split('.')[0], location.pathname.split('/')[1]] : ['dashkto', 'mnm-manual-combat-log'];
+}
+async function loadRepo(){
+  const [owner, repo] = repoSlug();
+  $('loaded').textContent = 'Loading logs from the repo...';
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/data`);
+    if (!res.ok) throw new Error(`GitHub said ${res.status}`);
+    const csvs = (await res.json()).filter(f => f.name.endsWith('.csv'));
+    addTexts(await Promise.all(csvs.map(async f => ({name: f.name, text: await (await fetch(f.download_url)).text()}))));
+  } catch (e) {
+    $('loaded').textContent = `Couldn't load from the repo (${e.message}). Download the CSVs and drop them here instead.`;
+  }
+}
+$('loadRepo').onclick = loadRepo;
 $('drop').onclick = () => $('file').click();
 $('file').onchange = e => addFiles(e.target.files);
 $('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
@@ -102,7 +126,133 @@ function filtered(){
   const mob = $('fMob').value, lvl = $('fLevel').value, who = $('fWho').value;
   return rows.filter(r => (!mob || r.mob_name === mob) && (!lvl || r.mob_level === lvl) && (!who || r.contributor === who));
 }
-['fMob','fLevel','fWho','cA','cB'].forEach(id => $(id).onchange = render);
+['fMob','fLevel','fWho'].forEach(id => $(id).onchange = render);
+
+// ---------- effects ----------
+const FACTORS = {mob_level: 'Mob level', weapon_skill: 'Weapon skill', offense: 'Offense', defense: 'Defense',
+  str: 'STR', agi: 'AGI', dex: 'DEX', ac: 'AC', weapon_dmg: 'Weapon damage'};
+const MODELS = [
+  {title: 'Your hit chance', actor: 'p', logistic: true, factors: ['dex', 'weapon_skill', 'offense']},
+  {title: 'Your damage per hit', actor: 'p', logistic: false, factors: ['str', 'weapon_dmg']},
+  {title: 'Mob hit chance on you', actor: 'm', logistic: true, factors: ['agi', 'defense']},
+  {title: 'Mob damage per hit on you', actor: 'm', logistic: false, factors: ['ac']},
+];
+const SERIES = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)'];
+
+// Up to 3 mob-level bands: each level if there are 3 or fewer, otherwise thirds.
+function levelBands(levels){
+  const u = [...new Set(levels)].sort((a, b) => a-b);
+  if (u.length <= 3) return u.map(l => ({label: `Mob L${l}`, level: l, has: x => x === l}));
+  const s = [...levels].sort((a, b) => a-b), cut = [s[Math.floor(s.length/3)], s[Math.floor(2*s.length/3)]];
+  const parts = [u.filter(l => l < cut[0]), u.filter(l => l >= cut[0] && l < cut[1]), u.filter(l => l >= cut[1])].filter(p => p.length);
+  return parts.map(p => ({label: p.length > 1 ? `Mob L${p[0]}–${p[p.length-1]}` : `Mob L${p[0]}`, level: median(p), has: x => p.includes(x)}));
+}
+
+// Raw averages of y binned by x: each value if few, else 8 quantile bins.
+function rawDots(rows, factor, logistic){
+  const xs = [...new Set(rows.map(r => r.x[factor]))].sort((a, b) => a-b);
+  let bins;
+  if (xs.length <= 12) bins = xs.map(v => rows.filter(r => r.x[factor] === v));
+  else {
+    const s = [...rows].sort((a, b) => a.x[factor] - b.x[factor]);
+    bins = Array.from({length: 8}, (_, i) => s.slice(Math.floor(i*s.length/8), Math.floor((i+1)*s.length/8)));
+  }
+  return bins.filter(b => b.length >= 5).map(b => {
+    const x = mean(b.map(r => r.x[factor])), ys = b.map(r => r.y), y = mean(ys);
+    if (logistic) { const [lo, hi] = wilson(ys.filter(v => v).length, ys.length); return {x, y, lo, hi, n: b.length}; }
+    const half = ys.length > 1 ? 1.96*Math.sqrt(variance(ys, y)/ys.length) : 0;
+    return {x, y, lo: y - half, hi: y + half, n: b.length};
+  });
+}
+
+function niceTicks(lo, hi, count = 5){
+  const step0 = (hi - lo || 1) / count, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map(m => m*mag).find(s => s >= step0);
+  const out = [];
+  for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+
+function chart({series, xLabel, logistic}){
+  const W = 340, H = 200, L = 40, R = 10, T = 8, B = 30;
+  const pts = series.flatMap(s => [...s.line, ...s.dots]);
+  let x0 = Math.min(...pts.map(p => p.x)), x1 = Math.max(...pts.map(p => p.x));
+  if (x0 === x1) { x0 -= 1; x1 += 1; }
+  let y0 = Math.min(...pts.map(p => p.lo)), y1 = Math.max(...pts.map(p => p.hi));
+  if (logistic) { y0 = Math.max(0, Math.floor(y0*10)/10); y1 = Math.min(1, Math.ceil(y1*10)/10); }
+  else { y0 = Math.max(0, Math.floor(y0)); y1 = Math.ceil(y1) + 1; }
+  if (y0 === y1) y1 = y0 + 1;
+  const sx = x => L + (x - x0)/(x1 - x0)*(W - L - R), sy = y => T + (1 - (y - y0)/(y1 - y0))*(H - T - B);
+  const clip = y => Math.max(y0, Math.min(y1, y));
+  const fy = y => logistic ? `${Math.round(100*y)}%` : String(+y.toFixed(1));
+  let g = niceTicks(y0, y1, 4).map(v => `<line x1="${L}" x2="${W-R}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--line)"/>
+    <text x="${L-6}" y="${sy(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fy(v)}</text>`).join('');
+  g += niceTicks(x0, x1, 5).filter(Number.isInteger).map(v =>
+    `<text x="${sx(v)}" y="${H-B+14}" text-anchor="middle" font-size="10" fill="var(--muted)">${v}</text>`).join('');
+  g += `<text x="${(L + W - R)/2}" y="${H-3}" text-anchor="middle" font-size="11" fill="var(--muted)">${xLabel}</text>`;
+  for (const s of series) {
+    if (s.line.length > 1) {
+      const band = [...s.line.map(p => `${sx(p.x)},${sy(clip(p.hi))}`), ...[...s.line].reverse().map(p => `${sx(p.x)},${sy(clip(p.lo))}`)].join(' ');
+      g += `<polygon points="${band}" fill="${s.color}" opacity="0.12"/>`;
+      g += `<polyline points="${s.line.map(p => `${sx(p.x)},${sy(clip(p.y))}`).join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+    }
+    for (const d of s.dots) {
+      g += `<g><title>${s.label} · ${xLabel} ${+d.x.toFixed(2)}: ${fy(d.y)} (n=${d.n})</title>
+        <line x1="${sx(d.x)}" x2="${sx(d.x)}" y1="${sy(clip(d.lo))}" y2="${sy(clip(d.hi))}" stroke="${s.color}" stroke-width="1.5" opacity="0.6"/>
+        <circle cx="${sx(d.x)}" cy="${sy(clip(d.y))}" r="4" fill="${s.color}" stroke="var(--panel)" stroke-width="2"/>
+        <circle cx="${sx(d.x)}" cy="${sy(clip(d.y))}" r="10" fill="transparent"/></g>`;
+    }
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${xLabel}">${g}</svg>`;
+}
+
+function renderEffects(data){
+  $('effects').innerHTML = MODELS.map(M => {
+    const names = [...M.factors, 'mob_level'];
+    const rows = data.filter(r => r.a === M.actor && (M.logistic || r.r === 'hit'))
+      .map(r => ({x: Object.fromEntries(names.map(v => [v, Number(r[v])])), y: M.logistic ? +(r.r === 'hit') : r.d}))
+      .filter(row => names.every(v => Number.isFinite(row.x[v])));
+    const head = `<h2>${M.title} <span class="hint">· ${rows.length} ${M.logistic ? 'swings' : 'hits'}</span></h2>`;
+    if (!rows.length) return `<div class="model">${head}<p class="hint">No data.</p></div>`;
+    const fit = fitModel(rows, M.factors, M.logistic);
+    const typical = Object.fromEntries(names.map(v => [v, median(rows.map(r => r.x[v]))]));
+    const bands = levelBands(rows.map(r => r.x.mob_level));
+    const measured = names.filter(v => fit.features.some(f => f.factor === v && !f.inter));
+    const fmt = e => M.logistic ? `${e >= 0 ? '+' : ''}${(100*e).toFixed(2)} pts` : `${e >= 0 ? '+' : ''}${e.toFixed(Math.abs(e) < 0.1 ? 3 : 2)}`;
+
+    const charts = measured.map(v => {
+      const xs = rows.map(r => r.x[v]), lo = Math.min(...xs), hi = Math.max(...xs);
+      const grid = Array.from({length: 21}, (_, i) => lo + (hi - lo)*i/20);
+      const series = v === 'mob_level'
+        ? [{label: 'All', color: SERIES[0], line: grid.map(x => ({x, ...predict(fit, {...typical, mob_level: x})})), dots: rawDots(rows, v, M.logistic)}]
+        : bands.map((b, i) => ({label: b.label, color: SERIES[i],
+            line: grid.map(x => ({x, ...predict(fit, {...typical, mob_level: b.level, [v]: x})})),
+            dots: rawDots(rows.filter(r => b.has(r.x.mob_level)), v, M.logistic)}));
+      const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${s.label}</span>`).join('')}</div>` : '';
+      return `<div class="chart"><h3>vs ${FACTORS[v]}</h3>${legend}${chart({series, xLabel: FACTORS[v], logistic: M.logistic})}</div>`;
+    }).join('');
+
+    const dep = v => {
+      if (v === 'mob_level') return '–';
+      const p = levelDependence(fit, v);
+      if (p === null) return '<span class="hint">not tested</span>';
+      return p < 0.05 ? `<span class="good">yes (p=${p.toFixed(3)})</span>` : `<span class="hint">no sign (p=${p.toFixed(3)})</span>`;
+    };
+    const table = measured.length ? `<div class="scroll"><table><tr><th>Per +1 of</th>${bands.map(b => `<th class="num">at ${b.label}</th>`).join('')}<th>Changes with mob level?</th></tr>${
+      measured.map(v => `<tr><td>${FACTORS[v]}</td>${bands.map(b => {
+        const sl = slope(fit, v, {...typical, mob_level: b.level});
+        return `<td class="num ${sl.p < 0.05 ? 'good' : ''}" title="95% range ${fmt(sl.lo)} to ${fmt(sl.hi)}, p=${sl.p.toFixed(3)}">${fmt(sl.effect)} <span class="hint">±${fmt((sl.hi - sl.lo)/2).replace(/^\+/, '')}</span></td>`;
+      }).join('')}<td>${dep(v)}</td></tr>`).join('')}</table></div>` : '';
+
+    const maxNote = M.logistic ? '' : `<p class="hint">Observed max hit: ${bands.map(b => `${Math.max(...rows.filter(r => b.has(r.x.mob_level)).map(r => r.y))} (${b.label})`).join(', ')}.</p>`;
+    const notes = [
+      fit.error,
+      fit.constant.length ? 'Not measurable yet (never changes): ' + fit.constant.map(v => FACTORS[v]).join(', ') : '',
+      fit.collinear.length ? "Can't separate: " + fit.collinear.map(([a, b]) => `${FACTORS[a]} (moves with ${FACTORS[b]})`).join(', ') : '',
+    ].filter(Boolean).join('. ');
+    return `<div class="model">${head}${charts ? `<div class="charts">${charts}</div>` : ''}${table}${maxNote}${notes ? `<p class="hint">${notes}.</p>` : ''}</div>`;
+  }).join('');
+}
 
 // ---------- render ----------
 const esc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
@@ -128,43 +278,11 @@ function render(){
         <td class="num">${m.n}</td><td>${fmtRate(m)}</td><td>${fmtDmg(m)}</td></tr>`;
     }).join('') : '<tr><td class="hint" colspan="9">No data.</td></tr>');
 
-  const labels = uniq(data, r => r.setup_label);
-  setOptions($('cA'), labels);
-  setOptions($('cB'), labels);
-  if (labels.length > 1 && $('cA').value === $('cB').value) $('cB').value = labels.find(l => l !== $('cA').value);
-  renderCompare(data);
-}
-
-function renderCompare(data){
-  const A = $('cA').value, B = $('cB').value;
-  if (!A || !B || A === B) { $('compare').innerHTML = '<p class="hint">Load data with at least two setup labels.</p>'; return; }
-  const pick = label => data.filter(r => r.setup_label === label);
-  const mobs = new Set(data.filter(r => r.setup_label === A || r.setup_label === B).map(r => r.mob_name + ' L' + r.mob_level));
-  const warn = mobs.size > 1 ? `<p class="warn">These setups mix ${mobs.size} mob/level combinations. Pick one mob and level above to hold the target fixed.</p>` : '';
-  $('compare').innerHTML = warn + block('Your swings', pick(A).filter(r => r.a === 'p'), pick(B).filter(r => r.a === 'p'), A, B)
-    + block('Mob swings on you', pick(A).filter(r => r.a === 'm'), pick(B).filter(r => r.a === 'm'), A, B);
-}
-
-function block(title, listA, listB, A, B){
-  const a = side(listA), b = side(listB);
-  const sig = c => c ? `<span class="${c.p < 0.05 ? 'good' : 'hint'}">p=${c.p.toFixed(3)}</span>` : '';
-  const ptsCI = c => c ? `${(100*c.diff).toFixed(1)} pts <span class="hint">[${(100*c.lo).toFixed(1)}, ${(100*c.hi).toFixed(1)}]</span>` : '–';
-  const numCI = c => c ? `${c.diff.toFixed(1)} <span class="hint">[${c.lo.toFixed(1)}, ${c.hi.toFixed(1)}]</span>` : '–';
-  const perSwing = s => s.n ? s.mean * s.rate : 0;
-  const rate = compareRates(a, b), mean = compareMeans(a, b);
-  const row = (m, va, vb, diff = '', p = '') => `<tr><td>${m}</td><td class="num">${va}</td><td class="num">${vb}</td><td>${diff}</td><td>${p}</td></tr>`;
-  const ea = perSwing(a), eb = perSwing(b);
-  return `<h2 style="margin-top:14px">${title}</h2><div class="scroll"><table>
-    <tr><th>Metric</th><th class="num">${esc(A)}</th><th class="num">${esc(B)}</th><th>Diff</th><th></th></tr>
-    ${row('Swings', a.n, b.n)}
-    ${row('Hit rate', a.n ? pct(a.rate) : '–', b.n ? pct(b.rate) : '–', ptsCI(rate), sig(rate))}
-    ${row('Avg hit', a.hits ? a.mean.toFixed(1) : '–', b.hits ? b.mean.toFixed(1) : '–', numCI(mean), sig(mean))}
-    ${row('Median / max hit', a.hits ? `${a.median} / ${a.max}` : '–', b.hits ? `${b.median} / ${b.max}` : '–')}
-    ${row('Damage per swing', a.n ? ea.toFixed(2) : '–', b.n ? eb.toFixed(2) : '–', ea && b.n ? `${(100*(eb/ea-1)).toFixed(1)}%` : '')}
-  </table></div>`;
+  renderEffects(data);
 }
 
 render();
+if (location.hostname.endsWith('.github.io')) loadRepo();
 </script>
 </body>
 </html>

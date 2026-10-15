@@ -57,11 +57,20 @@ Only manually entered logs are accepted (see [Staying within the terms of servic
 
 ## Analysis
 
-Open `analyze.html` and drop in one or more CSVs, from you or anyone else.
+Open `analyze.html` and either click **Load all logs from the repo** (automatic on the hosted page) or drop in any number of CSVs. Everything loaded is pooled.
 
-- **Filters:** pick a mob, mob level and contributor. Compare setups against a single mob and level.
-- **By setup:** your hit rate and average hit, plus the mob's hit rate and average hit on you, with 95% intervals.
-- **Compare:** choose a baseline setup and another one. Shows the difference in hit rate, average hit and damage per swing, with a 95% interval and p-value. If the interval spans zero, you need more data.
+- **Filters:** narrow to a mob, mob level or contributor.
+- **By setup:** raw hit rate and average hit for you and the mob, with 95% intervals.
+- **Effects:** one panel per outcome, each fitted to the factors assumed to drive it plus mob level:
+
+  | Outcome | Your side | Mob side |
+  |---|---|---|
+  | Your hit chance | DEX, weapon skill, offense | mob level |
+  | Your damage per hit | STR, weapon damage | mob level |
+  | Mob hit chance on you | AGI, defense | mob level |
+  | Mob damage per hit on you | AC | mob level |
+
+  Graphs show the fitted effect of each factor with the others held at typical values, one line per mob-level band, over the raw averages. The table gives the change per +1 at each mob level and whether that effect changes with mob level (e.g. AC mattering less against higher-level mobs). The more things vary across everyone's logs, the more it can measure; factors that never change, or always change together, are listed as not measurable.
 
 ## Getting a clean answer
 
@@ -79,6 +88,7 @@ To keep logs comparable without extra fields, every log assumes:
 - **No mob debuffs.** Fights where the mob has any debuff (slow, AC debuff and so on) are not logged.
 - **Buffs on you don't matter.** Enter stats and skills as the game shows them, buffs included.
 - **Class and race bonuses** are assumed to show up in your skills and attributes, so class isn't recorded.
+- **What drives what** (used by the analyzer): DEX, weapon skill and offense affect your hit chance; STR and weapon damage affect your damage; AGI and defense affect the mob's hit chance on you; AC affects the mob's damage on you. Mob level stands in for everything about the mob. The mob's class may matter but usually isn't known, so it's ignored for now.
 
 Deferred for now, may come back later:
 
