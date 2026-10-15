@@ -213,19 +213,22 @@ function renderEffects(data){
       if (p === null) return '<span class="hint">not tested</span>';
       return p < 0.05 ? `<span class="good">yes (p=${p.toFixed(3)})</span>` : `<span class="hint">no sign (p=${p.toFixed(3)})</span>`;
     };
-    const table = measured.length ? `<div class="scroll"><table><tr><th>Per +1 of</th>${levels.map(l => `<th class="num">at Mob L${l}</th>`).join('')}<th>Changes with mob level?</th></tr>${
-      measured.map(v => `<tr><td>${FACTORS[v]}</td>${levels.map(l => {
-        const sl = slope(fit, v, {...typical, mob_level: l});
-        return `<td class="num ${sl.p < 0.05 ? 'good' : ''}" title="95% range ${fmt(sl.lo)} to ${fmt(sl.hi)}, p=${sl.p.toFixed(3)}">${fmt(sl.effect)} <span class="hint">±${fmt((sl.hi - sl.lo)/2).replace(/^\+/, '')}</span></td>`;
-      }).join('')}<td>${dep(v)}</td></tr>`).join('')}</table></div>` : '';
+    // One row per mob level, one column per factor, so new levels add rows rather than columns.
+    const cell = (v, l) => {
+      const sl = slope(fit, v, {...typical, mob_level: l});
+      return `<td class="num ${sl.p < 0.05 ? 'good' : ''}" title="95% range ${fmt(sl.lo)} to ${fmt(sl.hi)}, p=${sl.p.toFixed(3)}">${fmt(sl.effect)} <span class="hint">±${fmt((sl.hi - sl.lo)/2).replace(/^\+/, '')}</span></td>`;
+    };
+    const maxHit = l => rows.some(r => r.x.mob_level === l) ? Math.max(...rows.filter(r => r.x.mob_level === l).map(r => r.y)) : '–';
+    const table = measured.length ? `<div class="scroll"><table><tr><th>Mob level</th>${measured.map(v => `<th class="num">Per +1 ${FACTORS[v]}</th>`).join('')}${M.logistic ? '' : '<th class="num">Max hit seen</th>'}</tr>${
+      levels.map(l => `<tr><td>L${l}</td>${measured.map(v => cell(v, l)).join('')}${M.logistic ? '' : `<td class="num">${maxHit(l)}</td>`}</tr>`).join('')
+    }<tr><td>Changes with mob level?</td>${measured.map(v => `<td class="num">${dep(v)}</td>`).join('')}${M.logistic ? '' : '<td></td>'}</tr></table></div>` : '';
 
-    const maxNote = M.logistic ? '' : `<p class="hint">Observed max hit: ${levels.map(l => `${Math.max(...rows.filter(r => r.x.mob_level === l).map(r => r.y))} (Mob L${l})`).join(', ')}.</p>`;
     const notes = [
       fit.error,
       fit.constant.length ? 'Not measurable yet (never changes): ' + fit.constant.map(v => FACTORS[v]).join(', ') : '',
       fit.collinear.length ? "Can't separate: " + fit.collinear.map(([a, b]) => `${FACTORS[a]} (moves with ${FACTORS[b]})`).join(', ') : '',
     ].filter(Boolean).join('. ');
-    return `<div class="model">${head}${charts ? `<div class="charts">${charts}</div>` : ''}${table}${maxNote}${notes ? `<p class="hint">${notes}.</p>` : ''}</div>`;
+    return `<div class="model">${head}${charts ? `<div class="charts">${charts}</div>` : ''}${table}${notes ? `<p class="hint">${notes}.</p>` : ''}</div>`;
   }).join('');
 }
 
