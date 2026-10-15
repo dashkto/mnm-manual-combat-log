@@ -49,12 +49,6 @@ td.num,th.num{text-align:right}
 </div>
 
 <div class="card">
-  <h2>By setup</h2>
-  <p class="hint">Ranges are 95% intervals.</p>
-  <div class="scroll"><table id="summary"></table></div>
-</div>
-
-<div class="card">
   <h2>Effects</h2>
   <p class="hint">Pools every swing loaded and fits each outcome to the factors assumed to drive it, plus mob level. Lines are the fitted model with the other factors held at typical values, one per mob level; the shaded band is its 95% range. Dots are raw averages (not held equal), to show how well the model fits. Factors that never change in the data can't be measured.</p>
   <div id="effects"></div>
@@ -256,29 +250,9 @@ function renderEffects(data){
 }
 
 // ---------- render ----------
-const esc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-const fmtRate = s => s.n ? `${pct(s.rate)} <span class="hint">${rng(s.ci)}</span>` : '–';
-const fmtDmg = s => s.hits ? `${s.mean.toFixed(1)} <span class="hint">±${s.half.toFixed(1)}</span>` : '–';
-
 function render(){
   const data = filtered();
   $('status').textContent = rows.length ? `${data.length} swings after filters` : '';
-
-  const groups = new Map();
-  for (const r of data) {
-    const k = `${r.setup_label}|${r.mob_name}|${r.mob_level}`;
-    if (!groups.has(k)) groups.set(k, {r, p: [], m: [], fights: new Set()});
-    groups.get(k)[r.a].push(r); groups.get(k).fights.add(r.session_id + ':' + r.fight);
-  }
-  const sorted = [...groups.values()].sort((x,y) => (x.r.setup_label + x.r.mob_name).localeCompare(y.r.setup_label + y.r.mob_name));
-  $('summary').innerHTML = `<tr><th>Setup</th><th>Mob</th><th class="num">Fights</th><th class="num">Your swings</th><th>Hit %</th><th>Avg hit</th>
-    <th class="num">Mob swings</th><th>Mob hit %</th><th>Mob avg hit</th></tr>` + (sorted.length ? sorted.map(g => {
-      const p = side(g.p), m = side(g.m);
-      return `<tr><td>${esc(g.r.setup_label)}</td><td>${esc(g.r.mob_name)} L${esc(g.r.mob_level)}</td><td class="num">${g.fights.size}</td>
-        <td class="num">${p.n}</td><td>${fmtRate(p)}</td><td>${fmtDmg(p)}</td>
-        <td class="num">${m.n}</td><td>${fmtRate(m)}</td><td>${fmtDmg(m)}</td></tr>`;
-    }).join('') : '<tr><td class="hint" colspan="9">No data.</td></tr>');
-
   renderEffects(data);
 }
 

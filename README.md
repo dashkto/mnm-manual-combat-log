@@ -65,7 +65,6 @@ Only manually entered logs are accepted (see [Staying within the terms of servic
 Open the **[Analyzer](https://dashkto.github.io/mnm-manual-combat-log/analyze.html)**. It pulls every CSV from the [shared logs](data/) automatically; offline, click **Load all logs from the repo** instead. Drop in any number of your own CSVs to add them. Everything loaded is pooled, and duplicate rows are skipped.
 
 - **Filters:** narrow to a mob, mob level or contributor.
-- **By setup:** raw hit rate and average hit for you and the mob, with 95% intervals.
 - **Effects:** one panel per outcome, each fitted to the factors assumed to drive it plus mob level:
 
   | Outcome | Your side | Mob side |
