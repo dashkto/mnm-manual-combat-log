@@ -21,6 +21,10 @@ nav{display:flex;gap:4px;flex-wrap:wrap}
 nav button{background:none;border:1px solid transparent;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
 nav button[aria-selected="true"]{border-color:var(--line);background:var(--bg);color:var(--ink);font-weight:600}
 #status{margin-left:auto;color:var(--muted);font-size:13px}
+a{color:var(--accent)}
+.sitenav{display:flex;gap:14px;font-size:13px}
+.sitenav a{color:var(--muted)}
+.sitenav a[aria-current]{color:var(--ink);font-weight:600;text-decoration:none}
 main{max-width:1000px;margin:0 auto;padding:16px}
 section[hidden]{display:none}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}

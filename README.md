@@ -2,6 +2,10 @@
 
 Hand-entered combat data for working out what stats and skills do in Monsters and Memories.
 
+- **[Logger](https://dashkto.github.io/mnm-manual-combat-log/)**: log your swings while you play.
+- **[Analyzer](https://dashkto.github.io/mnm-manual-combat-log/analyze.html)**: see what stats do across everyone's shared logs.
+- **[Shared logs](data/)**: every contributed CSV.
+
 ## Why
 
 The game doesn't publish its combat formulas, so questions like "what does +5 DEX do to my hit rate?" or "how much does AGI cut the hits I take?" have no answers beyond gut feel. This project collects swing-by-swing results from controlled tests (same mob, one change at a time) and turns them into hit rates and average damage with honest error bars. Several people logging the same way adds up to answers none of us could get alone.
@@ -18,11 +22,12 @@ If the developers ask us to change or stop, we will. Please don't contribute dat
 
 ## Using it in a browser
 
-Everything runs in your browser. There's nothing to install and no server; your data stays on your computer until you choose to send a CSV.
+Everything runs in your browser. There's nothing to install and no server; your data stays on your computer until you choose to share a CSV.
 
-1. On GitHub, click **Code → Download ZIP** and unzip it anywhere (or `git clone` the repo).
-2. Double-click `index.html` to open the logger. Keep the tab open next to the game, or on a second monitor.
-3. To analyze, open `analyze.html` (or follow the "analyzer" link in the logger) and drag CSV files onto it.
+1. Open the **[Logger](https://dashkto.github.io/mnm-manual-combat-log/)**. Keep the tab open next to the game, or on a second monitor.
+2. Open the **[Analyzer](https://dashkto.github.io/mnm-manual-combat-log/analyze.html)**. It loads all the shared logs automatically; drop in your own CSVs to include them too.
+
+Each page links to the other in its header. To use it offline, click **Code → Download ZIP** on GitHub, unzip it, and open `index.html` or `analyze.html`.
 
 Any modern browser works (Chrome, Edge, Firefox). The logger autosaves in the browser you use, so stick to one browser and download a CSV at the end of each session. Clearing browser data, or using a private window, loses unsaved swings.
 
@@ -57,7 +62,7 @@ Only manually entered logs are accepted (see [Staying within the terms of servic
 
 ## Analysis
 
-Open `analyze.html` and either click **Load all logs from the repo** (automatic on the hosted page) or drop in any number of CSVs. Everything loaded is pooled.
+Open the **[Analyzer](https://dashkto.github.io/mnm-manual-combat-log/analyze.html)**. It pulls every CSV from the [shared logs](data/) automatically; offline, click **Load all logs from the repo** instead. Drop in any number of your own CSVs to add them. Everything loaded is pooled, and duplicate rows are skipped.
 
 - **Filters:** narrow to a mob, mob level or contributor.
 - **By setup:** raw hit rate and average hit for you and the mob, with 95% intervals.

@@ -26,13 +26,14 @@ td.num,th.num{text-align:right}
 <body>
 <header>
   <h1>M&amp;M Combat Analysis</h1>
-  <a href="index.html" class="hint">← Logger</a>
   <div id="status"></div>
+  <div class="sitenav"><a href="index.html">Logger</a><a href="analyze.html" aria-current="page">Analyzer</a><a href="https://github.com/dashkto/mnm-manual-combat-log">GitHub</a></div>
 </header>
 <main>
 
 <div class="card">
   <h2>Data</h2>
+  <p class="hint">Everyone's shared logs live in the repo's <a href="https://github.com/dashkto/mnm-manual-combat-log/tree/main/data">data folder</a>. <b>Load all logs from the repo</b> pulls every one of them in (the hosted page does this automatically). You can also drop in your own CSVs, alone or on top of the shared ones.</p>
   <div id="drop">Drop combat log CSVs here, or click to choose files</div>
   <input type="file" id="file" accept=".csv,text/csv" multiple hidden>
   <div class="row" style="margin-top:10px"><button class="sec" id="loadRepo">Load all logs from the repo</button><span class="hint" id="loaded">No files loaded.</span></div>

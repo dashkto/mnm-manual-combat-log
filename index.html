@@ -16,6 +16,7 @@
     <button data-tab="data">Data</button>
   </nav>
   <div id="status"></div>
+  <div class="sitenav"><a href="index.html" aria-current="page">Logger</a><a href="analyze.html">Analyzer</a><a href="https://github.com/dashkto/mnm-manual-combat-log">GitHub</a></div>
 </header>
 <main>
 
@@ -72,7 +73,7 @@
 <section id="tab-data" hidden>
   <div class="card">
     <h2>Export</h2>
-    <p class="hint">One row per swing. Send the file to whoever is collecting, or drop it in the <code>data/</code> folder.</p>
+    <p class="hint">One row per swing. To share it, add it to the <a href="https://github.com/dashkto/mnm-manual-combat-log/tree/main/data">shared logs</a> by pull request (see the <a href="https://github.com/dashkto/mnm-manual-combat-log#contributing">README</a>).</p>
     <div class="row"><button class="act" id="export">Download CSV</button><span class="hint" id="exportInfo"></span></div>
     <p class="hint">Open the <a href="analyze.html">analyzer</a> and drop CSVs on it to see what stats do.</p>
   </div>
