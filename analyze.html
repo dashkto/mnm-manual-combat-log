@@ -13,12 +13,15 @@ label.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:v
 label.check input{width:auto}
 .good{color:var(--hit)}.warn{color:var(--warn)}
 td.num,th.num{text-align:right}
-.charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin:8px 0 12px}
+.charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:12px;margin:8px 0 12px}
 .chart{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 .chart h3{font:600 13px system-ui;margin:0 0 4px}
 .chart svg{width:100%;height:auto;display:block}
-.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:4px}
-.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.key{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin:2px 0 6px;flex-wrap:wrap}
+.key .ramp{width:110px;height:10px;border-radius:3px;background:linear-gradient(90deg,color-mix(in oklab,var(--panel),var(--series-1) 6%),var(--series-1))}
+.key .hatch{width:18px;height:10px;border-radius:3px;border:1px solid var(--line);background:repeating-linear-gradient(45deg,transparent 0 3px,var(--muted) 3px 4px)}
+.key .dot{width:10px;height:10px;border-radius:50%;background:var(--ink);border:2px solid var(--panel)}
+#tip{position:fixed;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;box-shadow:0 2px 8px #0003;display:none;white-space:nowrap;z-index:9}
 .model{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
 .model:first-of-type{border-top:0;margin-top:0;padding-top:0}
 </style>
@@ -50,11 +53,12 @@ td.num,th.num{text-align:right}
 
 <div class="card">
   <h2>Effects</h2>
-  <p class="hint">Pools every swing loaded and fits each outcome to the factors assumed to drive it, plus mob level. Lines are the fitted model with the other factors held at typical values, one per mob level; the shaded band is its 95% range. Dots are raw averages (not held equal), to show how well the model fits. Factors that never change in the data can't be measured.</p>
+  <p class="hint">Pools every swing loaded and fits each outcome to the factors assumed to drive it, plus mob level. Each chart is the fitted model seen from above: the stat across, every mob level down, and color for the model's value with the other factors held at typical values. Hatched cells were never logged, so the color there is the model's guess. Dots mark what was actually logged; hover anything for its numbers. Factors that never change in the data can't be measured.</p>
   <div id="effects"></div>
 </div>
 
 </main>
+<div id="tip"></div>
 <script src="stats.js"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -132,32 +136,45 @@ const MODELS = [
   {title: 'Mob hit chance on you', actor: 'm', logistic: true, factors: ['agi', 'defense']},
   {title: 'Mob damage per hit on you', actor: 'm', logistic: false, factors: ['ac']},
 ];
-const SERIES = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)'];
+const fmtv = (y, logistic) => logistic ? `${Math.round(100*y)}%` : y.toFixed(1);
 
-// Up to 3 mob-level bands: each level if there are 3 or fewer, otherwise thirds.
-function levelBands(levels){
-  const u = [...new Set(levels)].sort((a, b) => a-b);
-  if (u.length <= 3) return u.map(l => ({label: `Mob L${l}`, level: l, has: x => x === l}));
-  const s = [...levels].sort((a, b) => a-b), cut = [s[Math.floor(s.length/3)], s[Math.floor(2*s.length/3)]];
-  const parts = [u.filter(l => l < cut[0]), u.filter(l => l >= cut[0] && l < cut[1]), u.filter(l => l >= cut[1])].filter(p => p.length);
-  return parts.map(p => ({label: p.length > 1 ? `Mob L${p[0]}–${p[p.length-1]}` : `Mob L${p[0]}`, level: median(p), has: x => p.includes(x)}));
+// Cells for one stat: a column per value when the range is small, otherwise 16 bins.
+function columns(xs){
+  const min = Math.min(...xs), span = Math.max(...xs) - min, n = span <= 24 ? span + 1 : 16, w = span / (n - 1);
+  return Array.from({length: n}, (_, c) => ({mid: min + c*w, a: min + (c - 0.5)*w, b: min + (c + 0.5)*w,
+    label: span <= 24 ? String(min + c) : `${Math.round(min + (c - 0.5)*w)}–${Math.round(min + (c + 0.5)*w)}`}));
 }
 
-// Raw averages of y binned by x: each value if few, else 8 quantile bins.
-function rawDots(rows, factor, logistic){
-  const xs = [...new Set(rows.map(r => r.x[factor]))].sort((a, b) => a-b);
-  let bins;
-  if (xs.length <= 12) bins = xs.map(v => rows.filter(r => r.x[factor] === v));
-  else {
-    const s = [...rows].sort((a, b) => a.x[factor] - b.x[factor]);
-    bins = Array.from({length: 8}, (_, i) => s.slice(Math.floor(i*s.length/8), Math.floor((i+1)*s.length/8)));
+// Stat across, every mob level down, color = fitted value. Hatched = never logged.
+function heatmap({fit, rows, v, typical, logistic, scale, levels}){
+  const cols = columns(rows.map(r => r.x[v])), L0 = levels[0], L1 = levels[levels.length - 1];
+  const nRows = L1 - L0 + 1, rowH = Math.max(8, Math.min(26, Math.floor(260 / nRows))), labelEvery = rowH >= 14 ? 1 : 5;
+  const W = 360, Lm = 44, R = 8, T = 4, B = 32, H = T + B + rowH*nRows, cw = (W - Lm - R) / cols.length;
+  const lo = cols[0].a, hi = cols[cols.length - 1].b, sx = x => Lm + (x - lo) / (hi - lo) * (W - Lm - R);
+  const color = y => `color-mix(in oklab, var(--panel), var(--series-1) ${(6 + 94*Math.max(0, Math.min(1, (y - scale[0]) / (scale[1] - scale[0] || 1)))).toFixed(1)}%)`;
+  const id = 'h' + Math.random().toString(36).slice(2, 8);
+  let g = `<defs><pattern id="${id}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--panel)" stroke-width="2" opacity="0.85"/></pattern></defs>`;
+  for (let L = L0; L <= L1; L++) {
+    const y = T + (L1 - L)*rowH;
+    if ((L - L0) % labelEvery === 0 || L === L1) g += `<text x="${Lm - 6}" y="${y + rowH/2 + 4}" text-anchor="end" font-size="11" fill="var(--muted)">L${L}</text>`;
+    cols.forEach((c, i) => {
+      const p = predict(fit, {...typical, [v]: c.mid, mob_level: L});
+      const n = rows.filter(r => r.x.mob_level === L && r.x[v] >= c.a - 1e-9 && r.x[v] < c.b - 1e-9).length;
+      const tip = `Mob L${L} · ${FACTORS[v]} ${c.label}: model ${fmtv(p.y, logistic)} (95% ${fmtv(p.lo, logistic)}–${fmtv(p.hi, logistic)}) · ${n ? n + ' logged' : 'never logged'}`;
+      const box = `x="${(Lm + i*cw).toFixed(1)}" y="${y}" width="${(cw - 1).toFixed(1)}" height="${rowH - 2}" rx="2"`;
+      g += `<rect ${box} fill="${color(p.y)}" data-tip="${tip}"/>`;
+      if (!n) g += `<rect ${box} fill="url(#${id})" pointer-events="none"/>`;
+    });
   }
-  return bins.filter(b => b.length >= 5).map(b => {
-    const x = mean(b.map(r => r.x[factor])), ys = b.map(r => r.y), y = mean(ys);
-    if (logistic) { const [lo, hi] = wilson(ys.filter(v => v).length, ys.length); return {x, y, lo, hi, n: b.length}; }
-    const half = ys.length > 1 ? 1.96*Math.sqrt(variance(ys, y)/ys.length) : 0;
-    return {x, y, lo: y - half, hi: y + half, n: b.length};
-  });
+  const groups = new Map();
+  for (const r of rows) { const k = r.x[v] + '|' + r.x.mob_level; (groups.get(k) || groups.set(k, []).get(k)).push(r.y); }
+  for (const [k, ys] of groups) {
+    const [x, L] = k.split('|').map(Number), y = mean(ys);
+    g += `<circle cx="${sx(x).toFixed(1)}" cy="${T + (L1 - L)*rowH + rowH/2 - 1}" r="${rowH >= 14 ? 5 : 3}" fill="var(--ink)" stroke="var(--panel)" stroke-width="2" data-tip="Logged: ${FACTORS[v]} ${x}, mob L${L} · ${logistic ? `${Math.round(100*y)}% hit` : `avg ${y.toFixed(1)}`} · n=${ys.length}"/>`;
+  }
+  g += niceTicks(lo, hi, 5).filter(Number.isInteger).map(t => `<text x="${sx(t).toFixed(1)}" y="${H - B + 14}" text-anchor="middle" font-size="10" fill="var(--muted)">${t}</text>`).join('');
+  g += `<text x="${(Lm + W - R)/2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)">${FACTORS[v]}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${FACTORS[v]} by mob level">${g}</svg>`;
 }
 
 function niceTicks(lo, hi, count = 5){
@@ -166,39 +183,6 @@ function niceTicks(lo, hi, count = 5){
   const out = [];
   for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10));
   return out;
-}
-
-function chart({series, xLabel, logistic}){
-  const W = 340, H = 200, L = 40, R = 10, T = 8, B = 30;
-  const pts = series.flatMap(s => [...s.line, ...s.dots]);
-  let x0 = Math.min(...pts.map(p => p.x)), x1 = Math.max(...pts.map(p => p.x));
-  if (x0 === x1) { x0 -= 1; x1 += 1; }
-  let y0 = Math.min(...pts.map(p => p.lo)), y1 = Math.max(...pts.map(p => p.hi));
-  if (logistic) { y0 = Math.max(0, Math.floor(y0*10)/10); y1 = Math.min(1, Math.ceil(y1*10)/10); }
-  else { y0 = Math.max(0, Math.floor(y0)); y1 = Math.ceil(y1) + 1; }
-  if (y0 === y1) y1 = y0 + 1;
-  const sx = x => L + (x - x0)/(x1 - x0)*(W - L - R), sy = y => T + (1 - (y - y0)/(y1 - y0))*(H - T - B);
-  const clip = y => Math.max(y0, Math.min(y1, y));
-  const fy = y => logistic ? `${Math.round(100*y)}%` : String(+y.toFixed(1));
-  let g = niceTicks(y0, y1, 4).map(v => `<line x1="${L}" x2="${W-R}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--line)"/>
-    <text x="${L-6}" y="${sy(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fy(v)}</text>`).join('');
-  g += niceTicks(x0, x1, 5).filter(Number.isInteger).map(v =>
-    `<text x="${sx(v)}" y="${H-B+14}" text-anchor="middle" font-size="10" fill="var(--muted)">${v}</text>`).join('');
-  g += `<text x="${(L + W - R)/2}" y="${H-3}" text-anchor="middle" font-size="11" fill="var(--muted)">${xLabel}</text>`;
-  for (const s of series) {
-    if (s.line.length > 1) {
-      const band = [...s.line.map(p => `${sx(p.x)},${sy(clip(p.hi))}`), ...[...s.line].reverse().map(p => `${sx(p.x)},${sy(clip(p.lo))}`)].join(' ');
-      g += `<polygon points="${band}" fill="${s.color}" opacity="0.12"/>`;
-      g += `<polyline points="${s.line.map(p => `${sx(p.x)},${sy(clip(p.y))}`).join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
-    }
-    for (const d of s.dots) {
-      g += `<g><title>${s.label} · ${xLabel} ${+d.x.toFixed(2)}: ${fy(d.y)} (n=${d.n})</title>
-        <line x1="${sx(d.x)}" x2="${sx(d.x)}" y1="${sy(clip(d.lo))}" y2="${sy(clip(d.hi))}" stroke="${s.color}" stroke-width="1.5" opacity="0.6"/>
-        <circle cx="${sx(d.x)}" cy="${sy(clip(d.y))}" r="4" fill="${s.color}" stroke="var(--panel)" stroke-width="2"/>
-        <circle cx="${sx(d.x)}" cy="${sy(clip(d.y))}" r="10" fill="transparent"/></g>`;
-    }
-  }
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${xLabel}">${g}</svg>`;
 }
 
 function renderEffects(data){
@@ -211,21 +195,17 @@ function renderEffects(data){
     if (!rows.length) return `<div class="model">${head}<p class="hint">No data.</p></div>`;
     const fit = fitModel(rows, M.factors, M.logistic);
     const typical = Object.fromEntries(names.map(v => [v, median(rows.map(r => r.x[v]))]));
-    const bands = levelBands(rows.map(r => r.x.mob_level));
+    const levels = [...new Set(rows.map(r => r.x.mob_level))].sort((a, b) => a-b);
     const measured = names.filter(v => fit.features.some(f => f.factor === v && !f.inter));
     const fmt = e => M.logistic ? `${e >= 0 ? '+' : ''}${(100*e).toFixed(2)} pts` : `${e >= 0 ? '+' : ''}${e.toFixed(Math.abs(e) < 0.1 ? 3 : 2)}`;
 
-    const charts = measured.map(v => {
-      const xs = rows.map(r => r.x[v]), lo = Math.min(...xs), hi = Math.max(...xs);
-      const grid = Array.from({length: 21}, (_, i) => lo + (hi - lo)*i/20);
-      const series = v === 'mob_level'
-        ? [{label: 'All', color: SERIES[0], line: grid.map(x => ({x, ...predict(fit, {...typical, mob_level: x})})), dots: rawDots(rows, v, M.logistic)}]
-        : bands.map((b, i) => ({label: b.label, color: SERIES[i],
-            line: grid.map(x => ({x, ...predict(fit, {...typical, mob_level: b.level, [v]: x})})),
-            dots: rawDots(rows.filter(r => b.has(r.x.mob_level)), v, M.logistic)}));
-      const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${s.label}</span>`).join('')}</div>` : '';
-      return `<div class="chart"><h3>vs ${FACTORS[v]}</h3>${legend}${chart({series, xLabel: FACTORS[v], logistic: M.logistic})}</div>`;
-    }).join('');
+    const stats = measured.filter(v => v !== 'mob_level'), span = levels[levels.length - 1] - levels[0] + 1;
+    // One color scale per model, stretched to the values it shows, so its charts compare.
+    const vals = stats.flatMap(v => columns(rows.map(r => r.x[v])).flatMap(c =>
+      Array.from({length: span}, (_, i) => predict(fit, {...typical, [v]: c.mid, mob_level: levels[0] + i}).y)));
+    const scale = vals.length ? [Math.min(...vals), Math.max(...vals)] : [0, 1];
+    const key = `<div class="key"><span>${fmtv(scale[0], M.logistic)}</span><span class="ramp"></span><span>${fmtv(scale[1], M.logistic)}</span><span class="hatch"></span><span>never logged</span><span class="dot"></span><span>logged</span></div>`;
+    const charts = stats.map(v => `<div class="chart"><h3>${FACTORS[v]} × mob level</h3>${key}${heatmap({fit, rows, v, typical, logistic: M.logistic, scale, levels})}</div>`).join('');
 
     const dep = v => {
       if (v === 'mob_level') return '–';
@@ -233,13 +213,13 @@ function renderEffects(data){
       if (p === null) return '<span class="hint">not tested</span>';
       return p < 0.05 ? `<span class="good">yes (p=${p.toFixed(3)})</span>` : `<span class="hint">no sign (p=${p.toFixed(3)})</span>`;
     };
-    const table = measured.length ? `<div class="scroll"><table><tr><th>Per +1 of</th>${bands.map(b => `<th class="num">at ${b.label}</th>`).join('')}<th>Changes with mob level?</th></tr>${
-      measured.map(v => `<tr><td>${FACTORS[v]}</td>${bands.map(b => {
-        const sl = slope(fit, v, {...typical, mob_level: b.level});
+    const table = measured.length ? `<div class="scroll"><table><tr><th>Per +1 of</th>${levels.map(l => `<th class="num">at Mob L${l}</th>`).join('')}<th>Changes with mob level?</th></tr>${
+      measured.map(v => `<tr><td>${FACTORS[v]}</td>${levels.map(l => {
+        const sl = slope(fit, v, {...typical, mob_level: l});
         return `<td class="num ${sl.p < 0.05 ? 'good' : ''}" title="95% range ${fmt(sl.lo)} to ${fmt(sl.hi)}, p=${sl.p.toFixed(3)}">${fmt(sl.effect)} <span class="hint">±${fmt((sl.hi - sl.lo)/2).replace(/^\+/, '')}</span></td>`;
       }).join('')}<td>${dep(v)}</td></tr>`).join('')}</table></div>` : '';
 
-    const maxNote = M.logistic ? '' : `<p class="hint">Observed max hit: ${bands.map(b => `${Math.max(...rows.filter(r => b.has(r.x.mob_level)).map(r => r.y))} (${b.label})`).join(', ')}.</p>`;
+    const maxNote = M.logistic ? '' : `<p class="hint">Observed max hit: ${levels.map(l => `${Math.max(...rows.filter(r => r.x.mob_level === l).map(r => r.y))} (Mob L${l})`).join(', ')}.</p>`;
     const notes = [
       fit.error,
       fit.constant.length ? 'Not measurable yet (never changes): ' + fit.constant.map(v => FACTORS[v]).join(', ') : '',
@@ -248,6 +228,14 @@ function renderEffects(data){
     return `<div class="model">${head}${charts ? `<div class="charts">${charts}</div>` : ''}${table}${maxNote}${notes ? `<p class="hint">${notes}.</p>` : ''}</div>`;
   }).join('');
 }
+
+const tip = $('tip');
+document.addEventListener('mousemove', e => {
+  const t = e.target.closest?.('[data-tip]');
+  if (!t) { tip.style.display = 'none'; return; }
+  tip.textContent = t.dataset.tip; tip.style.display = 'block';
+  tip.style.left = Math.max(8, Math.min(e.clientX + 12, innerWidth - tip.offsetWidth - 8)) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+});
 
 // ---------- render ----------
 function render(){
