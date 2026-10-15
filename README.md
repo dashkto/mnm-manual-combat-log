@@ -74,7 +74,7 @@ Open the **[Analyzer](https://dashkto.github.io/mnm-manual-combat-log/analyze.ht
   | Mob hit chance on you | AGI, defense | mob level |
   | Mob damage per hit on you | AC | mob level |
 
-  Each chart is a heatmap of the fitted model: the stat across, every mob level down, color for the predicted value with the other factors held at typical values. Hatched cells were never logged (the color there is the model's guess), and dots mark what was. The table gives the change per +1 at each logged mob level and whether that effect changes with mob level (e.g. AC mattering less against higher-level mobs). The more things vary across everyone's logs, the more it can measure; factors that never change, or always change together, are listed as not measurable.
+  Each chart is a heatmap of the fitted model: the stat across, every mob level down, color for the predicted value with the other factors held at typical values. Hatched cells were never logged (the color there is the model's guess), and dots mark what was. The table has one row per logged mob level: the predicted outcome at typical stats, how much +1 of each stat changes it, and whether that effect changes with mob level (e.g. AC mattering less against higher-level mobs). The more things vary across everyone's logs, the more it can measure; factors that never change, or always change together, are listed as not measurable.
 
 ## Getting a clean answer
 

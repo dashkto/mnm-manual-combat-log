@@ -197,7 +197,7 @@ function renderEffects(data){
     const typical = Object.fromEntries(names.map(v => [v, median(rows.map(r => r.x[v]))]));
     const levels = [...new Set(rows.map(r => r.x.mob_level))].sort((a, b) => a-b);
     const measured = names.filter(v => fit.features.some(f => f.factor === v && !f.inter));
-    const fmt = e => M.logistic ? `${e >= 0 ? '+' : ''}${(100*e).toFixed(2)} pts` : `${e >= 0 ? '+' : ''}${e.toFixed(Math.abs(e) < 0.1 ? 3 : 2)}`;
+    const fmt = e => M.logistic ? `${e >= 0 ? '+' : ''}${(100*e).toFixed(2)} % pts` : `${e >= 0 ? '+' : ''}${e.toFixed(Math.abs(e) < 0.1 ? 3 : 2)}`;
 
     const stats = measured.filter(v => v !== 'mob_level'), span = levels[levels.length - 1] - levels[0] + 1;
     // One color scale per model, stretched to the values it shows, so its charts compare.
@@ -213,15 +213,19 @@ function renderEffects(data){
       if (p === null) return '<span class="hint">not tested</span>';
       return p < 0.05 ? `<span class="good">yes (p=${p.toFixed(3)})</span>` : `<span class="hint">no sign (p=${p.toFixed(3)})</span>`;
     };
-    // One row per mob level, one column per factor, so new levels add rows rather than columns.
+    // One row per mob level: the predicted outcome there, then what +1 of each stat changes it by.
+    const what = M.logistic ? 'hit chance' : 'avg hit';
+    const outcome = l => {
+      const pr = predict(fit, {...typical, mob_level: l});
+      return `<td class="num" title="95% range ${fmtv(pr.lo, M.logistic)} to ${fmtv(pr.hi, M.logistic)}">${fmtv(pr.y, M.logistic)} <span class="hint">±${fmtv((pr.hi - pr.lo)/2, M.logistic)}</span></td>`;
+    };
     const cell = (v, l) => {
-      const sl = slope(fit, v, {...typical, mob_level: l});
+      const sl = step(fit, v, {...typical, mob_level: l});
       return `<td class="num ${sl.p < 0.05 ? 'good' : ''}" title="95% range ${fmt(sl.lo)} to ${fmt(sl.hi)}, p=${sl.p.toFixed(3)}">${fmt(sl.effect)} <span class="hint">±${fmt((sl.hi - sl.lo)/2).replace(/^\+/, '')}</span></td>`;
     };
-    const maxHit = l => rows.some(r => r.x.mob_level === l) ? Math.max(...rows.filter(r => r.x.mob_level === l).map(r => r.y)) : '–';
-    const table = measured.length ? `<div class="scroll"><table><tr><th>Mob level</th>${measured.map(v => `<th class="num">Per +1 ${FACTORS[v]}</th>`).join('')}${M.logistic ? '' : '<th class="num">Max hit seen</th>'}</tr>${
-      levels.map(l => `<tr><td>L${l}</td>${measured.map(v => cell(v, l)).join('')}${M.logistic ? '' : `<td class="num">${maxHit(l)}</td>`}</tr>`).join('')
-    }<tr><td>Changes with mob level?</td>${measured.map(v => `<td class="num">${dep(v)}</td>`).join('')}${M.logistic ? '' : '<td></td>'}</tr></table></div>` : '';
+    const table = fit.beta ? `<div class="scroll"><table><tr><th>Mob level</th><th class="num">${M.logistic ? 'Hit chance' : 'Avg hit'}</th>${stats.map(v => `<th class="num">Change in ${what} per +1 ${FACTORS[v]}</th>`).join('')}</tr>${
+      levels.map(l => `<tr><td>L${l}</td>${outcome(l)}${stats.map(v => cell(v, l)).join('')}</tr>`).join('')
+    }${stats.length ? `<tr><td>Changes with mob level?</td><td></td>${stats.map(v => `<td class="num">${dep(v)}</td>`).join('')}</tr>` : ''}</table></div>` : '';
 
     const notes = [
       fit.error,

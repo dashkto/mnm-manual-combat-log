@@ -162,18 +162,16 @@ function predict(M, x){
   return M.logistic ? {y: sigmoid(eta), lo: sigmoid(eta - 1.96*se), hi: sigmoid(eta + 1.96*se)} : {y: eta, lo: eta - 1.96*se, hi: eta + 1.96*se};
 }
 
-// Change in the outcome per +1 of `factor` at point x (probability for logistic models).
-function slope(M, factor, x){
+// Predicted outcome at x with `factor` one higher, minus at x (probability for logistic models).
+function step(M, factor, x){
   if (!M.features.some(f => f.factor === factor && !f.inter)) return null;
-  const g = [0, ...M.features.map(f => {
-    if (f.factor === factor && !f.inter) return 1;
-    if (f.factor === factor && f.inter) return x.mob_level - M.center.mob_level;
-    if (factor === 'mob_level' && f.inter) return x[f.factor] - M.center[f.factor];
-    return 0;
-  })];
-  const d = dot(M.beta, g), se = Math.sqrt(quad(g, M.cov));
-  const scale = M.logistic ? (p => p*(1-p))(predict(M, x).y) : 1;
-  return {effect: d*scale, lo: (d - 1.96*se)*scale, hi: (d + 1.96*se)*scale, p: se ? pTwoSided(d/se) : 1};
+  const f0 = featureVector(M, x), f1 = featureVector(M, {...x, [factor]: x[factor] + 1});
+  // Gradient of the difference w.r.t. beta, for its standard error.
+  const grad = f => M.logistic ? (p => f.map(v => v*p*(1-p)))(sigmoid(dot(M.beta, f))) : f;
+  const g0 = grad(f0), g = grad(f1).map((v, i) => v - g0[i]);
+  const val = f => M.logistic ? sigmoid(dot(M.beta, f)) : dot(M.beta, f);
+  const d = val(f1) - val(f0), se = Math.sqrt(quad(g, M.cov));
+  return {effect: d, lo: d - 1.96*se, hi: d + 1.96*se, p: se ? pTwoSided(d/se) : 1};
 }
 
 // p-value for "this factor's effect changes with mob level", or null if not tested.
