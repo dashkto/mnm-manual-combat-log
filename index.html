@@ -95,6 +95,7 @@ const FIELDS = [
   ['weapon_skill','Weapon skill','number','Skills'],
   ['offense','Offense','number','Skills'],
   ['defense','Defense','number','Skills'],
+  ['dodge','Dodge','number','Skills','0 if none'],
   ['weapon_dmg','Main-hand damage','number','Weapon'],
   ['weapon_hands','Hands','select','Weapon','',[['',''],['1','1H'],['2','2H']]],
   ['weapon_delay','Delay','number','Weapon'],
@@ -102,8 +103,8 @@ const FIELDS = [
   ['mob_name','Mob name','text','Target'],
   ['mob_level','Mob level','number','Target'],
 ];
-const BUMP = ['weapon_skill','offense','defense'];
-const REQUIRED = ['contributor','setup_label','char_level','str','agi','dex','ac','weapon_skill','offense','defense','weapon_dmg','weapon_hands','weapon_delay','mob_name','mob_level'];
+const BUMP = ['weapon_skill','offense','defense','dodge'];
+const REQUIRED = ['contributor','setup_label','char_level','str','agi','dex','ac','weapon_skill','offense','defense','dodge','weapon_dmg','weapon_hands','weapon_delay','mob_name','mob_level'];
 
 let S = load() || {sessionId: rid(), fight: 1, setups: [], events: [], draft: {setup_label:'base'}};
 

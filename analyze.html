@@ -24,6 +24,7 @@ td.num,th.num{text-align:right}
 #tip{position:fixed;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;box-shadow:0 2px 8px #0003;display:none;white-space:nowrap;z-index:9}
 .model{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
 .model:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.model>h3{font:600 15px system-ui;margin:16px 0 6px}
 </style>
 </head>
 <body>
@@ -128,12 +129,12 @@ function filtered(){
 ['fMob','fLevel','fWho'].forEach(id => $(id).onchange = render);
 
 // ---------- effects ----------
-const FACTORS = {mob_level: 'Mob level', weapon_skill: 'Weapon skill', offense: 'Offense', defense: 'Defense',
+const FACTORS = {mob_level: 'Mob level', weapon_skill: 'Weapon skill', offense: 'Offense', defense: 'Defense', dodge: 'Dodge',
   str: 'STR', agi: 'AGI', dex: 'DEX', ac: 'AC', weapon_dmg: 'Weapon damage', weapon_hands: 'Hands', weapon_delay: 'Delay'};
 const MODELS = [
   {title: 'Your hit chance', actor: 'p', logistic: true, factors: ['dex', 'weapon_skill', 'offense']},
   {title: 'Your damage per hit', actor: 'p', logistic: false, factors: ['str', 'weapon_dmg', 'weapon_hands', 'weapon_delay']},
-  {title: 'Mob hit chance on you', actor: 'm', logistic: true, factors: ['agi', 'defense']},
+  {title: 'Mob hit chance on you', actor: 'm', logistic: true, factors: ['agi', 'defense', 'dodge']},
   {title: 'Mob damage per hit on you', actor: 'm', logistic: false, factors: ['ac']},
 ];
 const fmtv = (y, logistic) => logistic ? `${Math.round(100*y)}%` : y.toFixed(1);
@@ -185,24 +186,44 @@ function niceTicks(lo, hi, count = 5){
   return out;
 }
 
+const has = (r, v) => (r[v] ?? '') !== '';
+
 function renderEffects(data){
   $('effects').innerHTML = MODELS.map(M => {
     const pool = data.filter(r => r.a === M.actor && (M.logistic || r.r === 'hit'));
-    // A factor some logs don't record (older schema) is left out rather than dropping those logs.
-    const missing = M.factors.filter(v => pool.some(r => (r[v] ?? '') === ''));
-    const names = [...M.factors.filter(v => !missing.includes(v)), 'mob_level'];
+    const unit = M.logistic ? 'swings' : 'hits';
+    // Factors older logs don't record are fit separately, on only the logs that have them, so older logs still count for the rest.
+    const missing = M.factors.filter(v => pool.some(r => !has(r, v)));
+    const main = section(M, pool, M.factors.filter(v => !missing.includes(v)));
+    const head = `<h2>${M.title} <span class="hint">· ${main.n} ${unit}</span></h2>`;
+    if (!main.n) return `<div class="model">${head}<p class="hint">No data.</p></div>`;
+    let extra = '';
+    if (missing.length) {
+      const sub = pool.filter(r => missing.every(v => has(r, v)));
+      const names = missing.map(v => FACTORS[v]).join(', ');
+      const part = sub.length ? section(M, sub, M.factors, missing) : null;
+      extra = `<h3>${names} <span class="hint">· ${sub.length} ${unit}, only from logs that record ${missing.length > 1 ? 'them' : 'it'}</span></h3>${
+        part ? part.html : '<p class="hint">No logs record this yet.</p>'}`;
+    }
+    return `<div class="model">${head}${main.html}${extra}</div>`;
+  }).join('');
+}
+
+// Fits `factors` + mob level on `pool` and renders charts and table for the factors in `show` (all by default).
+function section(M, pool, factors, show){
+    const names = [...factors, 'mob_level'];
     const rows = pool
       .map(r => ({x: Object.fromEntries(names.map(v => [v, Number(r[v])])), y: M.logistic ? +(r.r === 'hit') : r.d}))
       .filter(row => names.every(v => Number.isFinite(row.x[v])));
-    const head = `<h2>${M.title} <span class="hint">· ${rows.length} ${M.logistic ? 'swings' : 'hits'}</span></h2>`;
-    if (!rows.length) return `<div class="model">${head}<p class="hint">No data.</p></div>`;
-    const fit = fitModel(rows, names.slice(0, -1), M.logistic);
+    if (!rows.length) return {n: 0, html: ''};
+    const shown = v => !show || show.includes(v);
+    const fit = fitModel(rows, factors, M.logistic);
     const typical = Object.fromEntries(names.map(v => [v, median(rows.map(r => r.x[v]))]));
     const levels = [...new Set(rows.map(r => r.x.mob_level))].sort((a, b) => a-b);
     const measured = names.filter(v => fit.features.some(f => f.factor === v && !f.inter));
     const fmt = e => M.logistic ? `${e >= 0 ? '+' : ''}${(100*e).toFixed(2)} % pts` : `${e >= 0 ? '+' : ''}${e.toFixed(Math.abs(e) < 0.1 ? 3 : 2)}`;
 
-    const stats = measured.filter(v => v !== 'mob_level'), span = levels[levels.length - 1] - levels[0] + 1;
+    const stats = measured.filter(v => v !== 'mob_level' && shown(v)), span = levels[levels.length - 1] - levels[0] + 1;
     // One color scale per model, stretched to the values it shows, so its charts compare.
     const vals = stats.flatMap(v => columns(rows.map(r => r.x[v])).flatMap(c =>
       Array.from({length: span}, (_, i) => predict(fit, {...typical, [v]: c.mid, mob_level: levels[0] + i}).y)));
@@ -229,12 +250,10 @@ function renderEffects(data){
 
     const notes = [
       fit.error,
-      missing.length ? 'Left out (not in every log): ' + missing.map(v => FACTORS[v]).join(', ') : '',
-      fit.constant.length ? 'Not measurable yet (never changes): ' + fit.constant.map(v => FACTORS[v]).join(', ') : '',
-      fit.collinear.length ? "Can't separate: " + fit.collinear.map(([a, b]) => `${FACTORS[a]} (moves with ${FACTORS[b]})`).join(', ') : '',
+      (c => c.length ? 'Not measurable yet (never changes): ' + c.map(v => FACTORS[v]).join(', ') : '')(fit.constant.filter(shown)),
+      (c => c.length ? "Can't separate: " + c.map(([a, b]) => `${FACTORS[a]} (moves with ${FACTORS[b]})`).join(', ') : '')(fit.collinear.filter(([a, b]) => shown(a) || shown(b))),
     ].filter(Boolean).join('. ');
-    return `<div class="model">${head}${charts ? `<div class="charts">${charts}</div>` : ''}${table}${notes ? `<p class="hint">${notes}.</p>` : ''}</div>`;
-  }).join('');
+    return {n: rows.length, html: `${charts ? `<div class="charts">${charts}</div>` : ''}${table}${notes ? `<p class="hint">${notes}.</p>` : ''}`};
 }
 
 const tip = $('tip');

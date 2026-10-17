@@ -34,7 +34,7 @@ Any modern browser works (Chrome, Edge, Firefox). The logger autosaves in the br
 ## Logging
 
 1. Open `index.html`.
-2. **Setup** tab: fill in your stats, skills, main-hand damage, the mob and its level, plus a short setup label (`base`, `dex+10`). Press **Apply**. Apply again whenever something changes; the `+1` buttons are for skill-ups.
+2. **Setup** tab: fill in your stats, skills, weapon (damage, 1H/2H, delay), the mob and its level, plus a short setup label (`base`, `dex+10`). Press **Apply**. Apply again whenever something changes; the `+1` buttons are for skill-ups.
 3. **Log** tab: type entries and press Enter.
 
 | Entry | Meaning |
@@ -71,17 +71,17 @@ Open the **[Analyzer](https://dashkto.github.io/mnm-manual-combat-log/analyze.ht
   |---|---|---|
   | Your hit chance | DEX, weapon skill, offense | mob level |
   | Your damage per hit | STR, weapon damage, hands (1H/2H), delay | mob level |
-  | Mob hit chance on you | AGI, defense | mob level |
+  | Mob hit chance on you | AGI, defense, dodge | mob level |
   | Mob damage per hit on you | AC | mob level |
 
-  Each chart is a heatmap of the fitted model: the stat across, every mob level down, color for the predicted value with the other factors held at typical values. Hatched cells were never logged (the color there is the model's guess), and dots mark what was. The table has one row per logged mob level: how much +1 of each stat changes the outcome there, and whether that effect changes with mob level (e.g. AC mattering less against higher-level mobs). The more things vary across everyone's logs, the more it can measure; factors that never change, or always change together, are listed as not measurable, and factors missing from some logs are left out.
+  Each chart is a heatmap of the fitted model: the stat across, every mob level down, color for the predicted value with the other factors held at typical values. Hatched cells were never logged (the color there is the model's guess), and dots mark what was. The table has one row per logged mob level: how much +1 of each stat changes the outcome there, and whether that effect changes with mob level (e.g. AC mattering less against higher-level mobs). The more things vary across everyone's logs, the more it can measure; factors that never change, or always change together, are listed as not measurable, and factors older logs don't record (e.g. hands, delay, dodge) are fit in their own section from only the logs that do, so older logs still count for everything else.
 
 ## Getting a clean answer
 
 - Change one thing between setups. Keep weapon and mob level fixed.
 - Follow the assumptions below.
 - Alternate setups (A, B, A, B) instead of all A then all B.
-- Weapon skill rises while you fight. Use a capped skill if you can; otherwise press `+1` on every skill-up so it gets recorded.
+- Skills (weapon, offense, defense, dodge) rise while you fight. Use a capped skill if you can; otherwise press `+1` on every skill-up so it gets recorded.
 - Swings needed per setup to detect a change in hit rate (around 70%): 10 points ≈ 300, 5 points ≈ 1,300, 2 points ≈ 8,000. Bigger stat changes are much cheaper to detect than +5.
 
 ## Assumptions and deferrals
@@ -92,19 +92,19 @@ To keep logs comparable without extra fields, every log assumes:
 - **No mob debuffs.** Fights where the mob has any debuff (slow, AC debuff and so on) are not logged.
 - **Buffs on you don't matter.** Enter stats and skills as the game shows them, buffs included.
 - **Class and race bonuses** are assumed to show up in your skills and attributes, so class isn't recorded.
-- **What drives what** (used by the analyzer): DEX, weapon skill and offense affect your hit chance; STR, weapon damage, hands and delay affect your damage (two-handers may get bonus damage); AGI and defense affect the mob's hit chance on you; AC affects the mob's damage on you. Mob level stands in for everything about the mob. The mob's class may matter but usually isn't known, so it's ignored for now.
+- **What drives what** (used by the analyzer): DEX, weapon skill and offense affect your hit chance; STR, weapon damage, hands and delay affect your damage (two-handers may get bonus damage); AGI, defense and dodge affect the mob's hit chance on you; AC affects the mob's damage on you. Mob level stands in for everything about the mob. The mob's class may matter but usually isn't known, so it's ignored for now.
 
 Deferred for now, may come back later:
 
 - **Offhand.** Offhand swings aren't logged.
 - **Abilities.** Only auto-attack swings are logged; skip combat abilities, spells, songs and procs.
 - **Crits.** Not marked. A critical hit is entered as a normal hit with its damage.
-- **Dodge, parry and block.** Logged as misses, on both sides, so avoidance types aren't broken out and your own dodge/parry/block skills aren't recorded.
+- **Dodge, parry and block.** Logged as misses, on both sides, so avoidance types aren't broken out. Your dodge skill is recorded (0 if you have none); parry and block skills aren't yet.
 
 ## CSV columns
 
-One row per swing: `schema_version, session_id, seq (swing number within the session), setup_version, fight, ts, actor (player|mob), result (hit|miss), damage`, followed by the setup in force at that swing: `contributor, setup_label, char_race, char_level, str, agi, dex, ac, weapon_skill, offense, defense, weapon_dmg, weapon_hands (1|2), weapon_delay, notes, mob_name, mob_level`.
+One row per swing: `schema_version, session_id, seq (swing number within the session), setup_version, fight, ts, actor (player|mob), result (hit|miss), damage`, followed by the setup in force at that swing: `contributor, setup_label, char_race, char_level, str, agi, dex, ac, weapon_skill, offense, defense, dodge, weapon_dmg, weapon_hands (1|2), weapon_delay, notes, mob_name, mob_level`.
 
-`weapon_hands` and `weapon_delay` were added in schema 4; older logs leave them out.
+`weapon_hands`, `weapon_delay` and `dodge` were added in schema 4; older logs leave them out.
 
 **Backward compatibility:** every older log must keep loading and analyzing. Read columns by name, treat a missing column as unknown (never as 0), and only add columns—never rename, remove or change the meaning of one.
