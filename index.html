@@ -79,10 +79,10 @@
 </main>
 <script src="stats.js"></script>
 <script>
-const SCHEMA = 3;
+const SCHEMA = 4;
 const KEY = 'mnm-combat-log-v1';
 
-// [field, label, type, group]
+// [field, label, type, group, placeholder, select options]
 const FIELDS = [
   ['contributor','Your handle','text','Experiment'],
   ['setup_label','Setup label','text','Experiment','e.g. base, dex+10'],
@@ -96,12 +96,14 @@ const FIELDS = [
   ['offense','Offense','number','Skills'],
   ['defense','Defense','number','Skills'],
   ['weapon_dmg','Main-hand damage','number','Weapon'],
+  ['weapon_hands','Hands','select','Weapon','',[['',''],['1','1H'],['2','2H']]],
+  ['weapon_delay','Delay','number','Weapon'],
   ['notes','Notes','text','Experiment'],
   ['mob_name','Mob name','text','Target'],
   ['mob_level','Mob level','number','Target'],
 ];
 const BUMP = ['weapon_skill','offense','defense'];
-const REQUIRED = ['contributor','setup_label','char_level','str','agi','dex','ac','weapon_skill','offense','defense','weapon_dmg','mob_name','mob_level'];
+const REQUIRED = ['contributor','setup_label','char_level','str','agi','dex','ac','weapon_skill','offense','defense','weapon_dmg','weapon_hands','weapon_delay','mob_name','mob_level'];
 
 let S = load() || {sessionId: rid(), fight: 1, setups: [], events: [], draft: {setup_label:'base'}};
 
@@ -164,10 +166,11 @@ function setMsg(t, bad){ $('msg').textContent = t; $('msg').className = bad ? 'b
 // ---------- setup form ----------
 function buildForm(){
   const groups = {};
-  for (const [f,label,type,g,ph] of FIELDS) (groups[g] ||= []).push([f,label,type,ph]);
+  for (const [f,label,type,g,ph,opts] of FIELDS) (groups[g] ||= []).push([f,label,type,ph,opts]);
   $('setupForm').innerHTML = Object.entries(groups).map(([g, fs]) =>
-    `<fieldset><legend>${g}</legend><div class="grid">${fs.map(([f,label,type,ph]) =>
-      `<label>${label}<span class="inline"><input name="${f}" type="${type}" placeholder="${ph||''}" ${type==='number'?'step="any"':''}>${
+    `<fieldset><legend>${g}</legend><div class="grid">${fs.map(([f,label,type,ph,opts]) =>
+      `<label>${label}<span class="inline">${opts ? `<select name="${f}">${opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`
+        : `<input name="${f}" type="${type}" placeholder="${ph||''}" ${type==='number'?'step="any"':''}>`}${
         BUMP.includes(f) ? `<button type="button" class="mini" data-bump="${f}" title="Skill-up: +1 and apply">+1</button>` : ''
       }</span></label>`).join('')}</div></fieldset>`).join('');
   for (const [f] of FIELDS) $('setupForm').elements[f].value = S.draft[f] ?? '';

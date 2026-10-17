@@ -129,10 +129,10 @@ function filtered(){
 
 // ---------- effects ----------
 const FACTORS = {mob_level: 'Mob level', weapon_skill: 'Weapon skill', offense: 'Offense', defense: 'Defense',
-  str: 'STR', agi: 'AGI', dex: 'DEX', ac: 'AC', weapon_dmg: 'Weapon damage'};
+  str: 'STR', agi: 'AGI', dex: 'DEX', ac: 'AC', weapon_dmg: 'Weapon damage', weapon_hands: 'Hands', weapon_delay: 'Delay'};
 const MODELS = [
   {title: 'Your hit chance', actor: 'p', logistic: true, factors: ['dex', 'weapon_skill', 'offense']},
-  {title: 'Your damage per hit', actor: 'p', logistic: false, factors: ['str', 'weapon_dmg']},
+  {title: 'Your damage per hit', actor: 'p', logistic: false, factors: ['str', 'weapon_dmg', 'weapon_hands', 'weapon_delay']},
   {title: 'Mob hit chance on you', actor: 'm', logistic: true, factors: ['agi', 'defense']},
   {title: 'Mob damage per hit on you', actor: 'm', logistic: false, factors: ['ac']},
 ];
@@ -187,13 +187,16 @@ function niceTicks(lo, hi, count = 5){
 
 function renderEffects(data){
   $('effects').innerHTML = MODELS.map(M => {
-    const names = [...M.factors, 'mob_level'];
-    const rows = data.filter(r => r.a === M.actor && (M.logistic || r.r === 'hit'))
+    const pool = data.filter(r => r.a === M.actor && (M.logistic || r.r === 'hit'));
+    // A factor some logs don't record (older schema) is left out rather than dropping those logs.
+    const missing = M.factors.filter(v => pool.some(r => (r[v] ?? '') === ''));
+    const names = [...M.factors.filter(v => !missing.includes(v)), 'mob_level'];
+    const rows = pool
       .map(r => ({x: Object.fromEntries(names.map(v => [v, Number(r[v])])), y: M.logistic ? +(r.r === 'hit') : r.d}))
       .filter(row => names.every(v => Number.isFinite(row.x[v])));
     const head = `<h2>${M.title} <span class="hint">· ${rows.length} ${M.logistic ? 'swings' : 'hits'}</span></h2>`;
     if (!rows.length) return `<div class="model">${head}<p class="hint">No data.</p></div>`;
-    const fit = fitModel(rows, M.factors, M.logistic);
+    const fit = fitModel(rows, names.slice(0, -1), M.logistic);
     const typical = Object.fromEntries(names.map(v => [v, median(rows.map(r => r.x[v]))]));
     const levels = [...new Set(rows.map(r => r.x.mob_level))].sort((a, b) => a-b);
     const measured = names.filter(v => fit.features.some(f => f.factor === v && !f.inter));
@@ -226,6 +229,7 @@ function renderEffects(data){
 
     const notes = [
       fit.error,
+      missing.length ? 'Left out (not in every log): ' + missing.map(v => FACTORS[v]).join(', ') : '',
       fit.constant.length ? 'Not measurable yet (never changes): ' + fit.constant.map(v => FACTORS[v]).join(', ') : '',
       fit.collinear.length ? "Can't separate: " + fit.collinear.map(([a, b]) => `${FACTORS[a]} (moves with ${FACTORS[b]})`).join(', ') : '',
     ].filter(Boolean).join('. ');

@@ -70,11 +70,11 @@ Open the **[Analyzer](https://dashkto.github.io/mnm-manual-combat-log/analyze.ht
   | Outcome | Your side | Mob side |
   |---|---|---|
   | Your hit chance | DEX, weapon skill, offense | mob level |
-  | Your damage per hit | STR, weapon damage | mob level |
+  | Your damage per hit | STR, weapon damage, hands (1H/2H), delay | mob level |
   | Mob hit chance on you | AGI, defense | mob level |
   | Mob damage per hit on you | AC | mob level |
 
-  Each chart is a heatmap of the fitted model: the stat across, every mob level down, color for the predicted value with the other factors held at typical values. Hatched cells were never logged (the color there is the model's guess), and dots mark what was. The table has one row per logged mob level: how much +1 of each stat changes the outcome there, and whether that effect changes with mob level (e.g. AC mattering less against higher-level mobs). The more things vary across everyone's logs, the more it can measure; factors that never change, or always change together, are listed as not measurable.
+  Each chart is a heatmap of the fitted model: the stat across, every mob level down, color for the predicted value with the other factors held at typical values. Hatched cells were never logged (the color there is the model's guess), and dots mark what was. The table has one row per logged mob level: how much +1 of each stat changes the outcome there, and whether that effect changes with mob level (e.g. AC mattering less against higher-level mobs). The more things vary across everyone's logs, the more it can measure; factors that never change, or always change together, are listed as not measurable, and factors missing from some logs are left out.
 
 ## Getting a clean answer
 
@@ -92,7 +92,7 @@ To keep logs comparable without extra fields, every log assumes:
 - **No mob debuffs.** Fights where the mob has any debuff (slow, AC debuff and so on) are not logged.
 - **Buffs on you don't matter.** Enter stats and skills as the game shows them, buffs included.
 - **Class and race bonuses** are assumed to show up in your skills and attributes, so class isn't recorded.
-- **What drives what** (used by the analyzer): DEX, weapon skill and offense affect your hit chance; STR and weapon damage affect your damage; AGI and defense affect the mob's hit chance on you; AC affects the mob's damage on you. Mob level stands in for everything about the mob. The mob's class may matter but usually isn't known, so it's ignored for now.
+- **What drives what** (used by the analyzer): DEX, weapon skill and offense affect your hit chance; STR, weapon damage, hands and delay affect your damage (two-handers may get bonus damage); AGI and defense affect the mob's hit chance on you; AC affects the mob's damage on you. Mob level stands in for everything about the mob. The mob's class may matter but usually isn't known, so it's ignored for now.
 
 Deferred for now, may come back later:
 
@@ -103,4 +103,8 @@ Deferred for now, may come back later:
 
 ## CSV columns
 
-One row per swing: `schema_version, session_id, seq (swing number within the session), setup_version, fight, ts, actor (player|mob), result (hit|miss), damage`, followed by the setup in force at that swing: `contributor, setup_label, char_race, char_level, str, agi, dex, ac, weapon_skill, offense, defense, weapon_dmg, notes, mob_name, mob_level`.
+One row per swing: `schema_version, session_id, seq (swing number within the session), setup_version, fight, ts, actor (player|mob), result (hit|miss), damage`, followed by the setup in force at that swing: `contributor, setup_label, char_race, char_level, str, agi, dex, ac, weapon_skill, offense, defense, weapon_dmg, weapon_hands (1|2), weapon_delay, notes, mob_name, mob_level`.
+
+`weapon_hands` and `weapon_delay` were added in schema 4; older logs leave them out.
+
+**Backward compatibility:** every older log must keep loading and analyzing. Read columns by name, treat a missing column as unknown (never as 0), and only add columns—never rename, remove or change the meaning of one.
