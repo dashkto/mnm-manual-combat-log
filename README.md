@@ -14,7 +14,7 @@ The game doesn't publish its combat formulas, so questions like "what does +5 DE
 
 We are trying hard to stay on the right side of the game's rules, which forbid automated combat parsing. So this project is deliberately manual:
 
-- A person reads the in-game combat window and types what they see. Nothing here touches the game.
+- A person reads the in-game combat window and types or speaks what they see. Nothing here touches the game.
 - No OCR, screenshots, screen readers, memory reading, packet capture, log scraping or macros, and no plans to add any.
 - The tool is a standalone web page with no connection to the game client.
 
@@ -49,6 +49,24 @@ Any modern browser works (Chrome, Edge, Firefox). The logger autosaves in the br
 Several entries per line work: `14 m 12 -22 -m`.
 
 4. **Data** tab: **Download CSV**.
+
+### Voice entry
+
+Press **Voice** on the Log tab and say your entries instead of typing them:
+
+| Say | Entry |
+|---|---|
+| "fourteen" | `14` |
+| "miss" | `m` |
+| "mob twenty two" | `-22` |
+| "mob miss" | `-m` |
+| "next" | `n` |
+| "undo" | `u` |
+| "pause" / "resume" | stop / restart logging, e.g. while chatting |
+
+Numbers over 99: "one fifteen" or "one hundred fifteen". A beep confirms each logged entry; a low tone means nothing was understood. Several entries in one breath work too ("eight mob miss"). **Wait** sets how long a pause ends a phrase: shorter is faster, but too short can split "mob … twenty two".
+
+Recognition runs in your browser with [Vosk](https://alphacephei.com/vosk/), listening only for the words above. No audio leaves your computer. The first use downloads a 41 MB model from [voice-model](https://github.com/dashkto/voice-model); after that it's cached. Use a headset mic if you can, so game audio and voice chat aren't picked up.
 
 ## Contributing
 
@@ -103,8 +121,8 @@ Deferred for now, may come back later:
 
 ## CSV columns
 
-One row per swing: `schema_version, session_id, seq (swing number within the session), setup_version, fight, ts, actor (player|mob), result (hit|miss), damage`, followed by the setup in force at that swing: `contributor, setup_label, char_race, char_level, str, agi, dex, ac, weapon_skill, offense, defense, dodge, weapon_dmg, weapon_hands (1|2), weapon_delay, notes, mob_name, mob_level`.
+One row per swing: `schema_version, session_id, seq (swing number within the session), setup_version, fight, ts, actor (player|mob), result (hit|miss), damage`, followed by the setup in force at that swing: `contributor, setup_label, char_race, char_level, str, agi, dex, ac, weapon_skill, offense, defense, dodge, weapon_dmg, weapon_hands (1|2), weapon_delay, notes, mob_name, mob_level`, then `entry_method`.
 
-`weapon_hands`, `weapon_delay` and `dodge` were added in schema 4; older logs leave them out.
+`weapon_hands`, `weapon_delay` and `dodge` were added in schema 4; older logs leave them out. `entry_method` (`typed|voice`) was added in schema 5.
 
 **Backward compatibility:** every older log must keep loading and analyzing. Read columns by name, treat a missing column as unknown (never as 0), and only add columns—never rename, remove or change the meaning of one.

@@ -28,6 +28,12 @@
     <input id="entry" autocomplete="off" spellcheck="false" placeholder="14 m 12 -22 -m   (Enter)">
     <div id="msg"></div>
     <div class="chips" id="lastChips"></div>
+    <div class="voicebar">
+      <button class="sec" id="voiceBtn" aria-pressed="false">Voice: off</button>
+      <label class="check" title="0 turns beeps off">Beep <input type="range" id="voiceVol" min="0" max="1" step="0.1"></label>
+      <label class="check" title="How long to wait after you stop speaking before logging. Shorter is faster but can split a phrase.">Wait <input type="range" id="voiceWait" min="150" max="600" step="25"> <span id="voiceWaitVal"></span></label>
+      <span class="hint" id="voiceStatus">Speak your entries instead of typing them.</span>
+    </div>
     <p class="hint">For clean data: fight from the front, don't log fights where the mob is debuffed, and log auto-attack swings only.</p>
   </div>
   <div class="card">
@@ -44,6 +50,16 @@
       <div><code>n</code> next fight &nbsp; <code>u</code> undo</div>
     </div>
     <p class="hint">Several per line is fine: <code>14 m 12 -22 -m</code>. Main hand only: skip offhand swings.</p>
+    <h2 style="margin-top:14px">Voice words</h2>
+    <div class="grammar">
+      <div><code>fourteen</code> you hit for 14</div>
+      <div><code>miss</code> you miss</div>
+      <div><code>mob twenty two</code> mob hits you for 22</div>
+      <div><code>mob miss</code> mob misses you</div>
+      <div><code>next</code> next fight &nbsp; <code>undo</code> undo</div>
+      <div><code>pause</code> / <code>resume</code> stop or restart logging</div>
+    </div>
+    <p class="hint">Numbers over 99: “one fifteen” or “one hundred fifteen”. Say <code>pause</code> before chatting so talk isn't logged. Recognition runs in your browser; no audio leaves your computer.</p>
   </div>
   <div class="card">
     <h2>Recent</h2>
@@ -78,8 +94,9 @@
 
 </main>
 <script src="stats.js"></script>
+<script src="voice.js"></script>
 <script>
-const SCHEMA = 4;
+const SCHEMA = 5;
 const KEY = 'mnm-combat-log-v1';
 
 // [field, label, type, group, placeholder, select options]
@@ -136,33 +153,92 @@ function describe(e){
 const chipText = e => (e.a==='m'?'-':'') + (e.r === 'hit' ? e.d : 'm');
 
 // ---------- entry ----------
-$('entry').addEventListener('keydown', ev => {
-  if (ev.key === 'Escape') { ev.target.value = ''; setMsg(''); return; }
-  if (ev.key !== 'Enter') return;
-  const line = ev.target.value.trim();
-  if (!line) return;
-  if (!cur()) { setMsg('Fill in Setup and press Apply first.', true); return; }
+// Logs a line of tokens; method is 'typed' or 'voice'. Returns false if nothing was logged.
+function submit(line, method){
+  if (!cur()) { setMsg('Fill in Setup and press Apply first.', true); return false; }
   const {actions, error} = parse(line);
-  if (error) { setMsg(error, true); ev.target.classList.add('bad'); return; }
-  ev.target.classList.remove('bad');
+  if (error) { setMsg(error, true); return false; }
   const chips = [];
   for (const a of actions) {
     if (a.cmd === 'n') { S.fight++; chips.push(`<span class="chip">next fight → ${S.fight}</span>`); }
     else if (a.cmd === 'u') { const e = S.events.pop(); chips.push(`<span class="chip x">undo ${e ? chipText(e) : '(nothing)'}</span>`); }
     else {
       S.seq = (S.seq || 0) + 1;
-      const e = {n: S.seq, ts: new Date().toISOString(), f: S.fight, s: cur().id, ...a.ev};
+      const e = {n: S.seq, ts: new Date().toISOString(), f: S.fight, s: cur().id, ...a.ev, v: method};
       S.events.push(e);
       chips.push(`<span class="chip ${e.a}">${chipText(e)}</span>`);
     }
   }
   $('lastChips').innerHTML = chips.join('');
-  ev.target.value = '';
   const nEv = actions.filter(a => a.ev).length;
   setMsg(nEv ? `${nEv} logged` : 'Done');
   save(); render();
+  return true;
+}
+$('entry').addEventListener('keydown', ev => {
+  if (ev.key === 'Escape') { ev.target.value = ''; setMsg(''); return; }
+  if (ev.key !== 'Enter') return;
+  const line = ev.target.value.trim();
+  if (!line) return;
+  const ok = submit(line, 'typed');
+  ev.target.classList.toggle('bad', !ok && !!cur());
+  if (ok) ev.target.value = '';
 });
 function setMsg(t, bad){ $('msg').textContent = t; $('msg').className = bad ? 'bad' : ''; }
+
+// ---------- voice ----------
+let voicePaused = false;
+const LISTEN_HINT = 'Listening: say “fourteen”, “mob twelve”, “miss”, “next”…';
+const voiceStatus = (t, cls = '') => { $('voiceStatus').textContent = t; $('voiceStatus').className = 'hint ' + cls; };
+const beep = (f, ms) => { const v = +$('voiceVol').value; if (v > 0) Voice.beep(f, ms, v); };
+
+// Voice settings are per browser, kept apart from the log.
+const VKEY = 'mnm-combat-log-voice';
+const vset = (() => { try { return JSON.parse(localStorage.getItem(VKEY)) || {}; } catch(e){ return {}; } })();
+$('voiceVol').value = vset.vol ?? 0.6;
+$('voiceWait').value = vset.wait ?? 300;
+function applyVoiceSettings(){
+  Voice.endMs = +$('voiceWait').value;
+  $('voiceWaitVal').textContent = $('voiceWait').value + ' ms';
+  try { localStorage.setItem(VKEY, JSON.stringify({vol: +$('voiceVol').value, wait: +$('voiceWait').value})); } catch(e){}
+}
+$('voiceVol').oninput = applyVoiceSettings;
+$('voiceVol').onchange = () => beep(880, 70);
+$('voiceWait').oninput = applyVoiceSettings;
+applyVoiceSettings();
+
+function onVoiceState(state, detail){
+  const on = state === 'listening' || state === 'loading';
+  $('voiceBtn').setAttribute('aria-pressed', on);
+  $('voiceBtn').textContent = on ? 'Voice: on' : 'Voice: off';
+  if (state === 'listening') { voicePaused = false; voiceStatus(LISTEN_HINT, 'live'); }
+  else if (state === 'loading') voiceStatus(detail);
+  else if (state === 'error') voiceStatus(detail, 'bad');
+  else voiceStatus('Voice off.');
+}
+
+function onVoiceResult(heard){
+  const {tokens, junk} = Voice.toTokens(heard);
+  const keep = [];
+  for (const t of tokens) {
+    if (t === 'pause') voicePaused = true;
+    else if (t === 'resume') voicePaused = false;
+    else if (!voicePaused) keep.push(t);
+  }
+  if (tokens.some(t => t === 'pause' || t === 'resume')) beep(520, 120);
+  if (keep.length) { if (submit(keep.join(' '), 'voice')) beep(880, 70); }
+  else if (junk.length && !voicePaused) beep(200, 140);
+  voiceStatus(voicePaused ? 'Paused: say “resume” to log again.' : `Heard “${heard}”`, voicePaused ? 'paused' : 'live');
+}
+
+$('voiceBtn').onclick = () => {
+  if (Voice.on) { Voice.stop(); return; }
+  Voice.start({
+    onState: onVoiceState,
+    onResult: onVoiceResult,
+    onPartial: p => { if (p && !voicePaused) voiceStatus(`Hearing “${p}”…`, 'live'); },
+  });
+};
 
 // ---------- setup form ----------
 function buildForm(){
@@ -232,7 +308,7 @@ function render(){
 
   const recent = S.events.map((e,i) => [e,i]).slice(-40).reverse();
   $('recent').innerHTML = recent.length ? recent.map(([e,i]) =>
-    `<tr><td>#${e.f}</td><td class="${e.a}">${describe(e)}</td><td class="hint">${e.ts.slice(11,19)}</td>
+    `<tr><td>#${e.f}</td><td class="${e.a}">${describe(e)}</td><td class="hint">${e.ts.slice(11,19)}${e.v === 'voice' ? ' · voice' : ''}</td>
      <td><button class="mini" data-del="${i}" title="Delete">✕</button></td></tr>`).join('')
     : '<tr><td class="hint">Nothing logged yet.</td></tr>';
 
@@ -247,7 +323,7 @@ $('recent').addEventListener('click', ev => {
 
 // ---------- export ----------
 const COLS = ['schema_version','session_id','seq','setup_version','fight','ts','actor','result','damage',
-  ...FIELDS.map(([f]) => f)];
+  ...FIELDS.map(([f]) => f), 'entry_method'];
 const esc = v => { v = String(v ?? ''); return /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v; };
 $('export').onclick = () => {
   const byId = Object.fromEntries(S.setups.map(s => [s.id, s]));
@@ -255,7 +331,7 @@ $('export').onclick = () => {
   for (const e of S.events) {
     const s = byId[e.s];
     const row = {schema_version: SCHEMA, session_id: S.sessionId, seq: e.n, setup_version: e.s, fight: e.f, ts: e.ts,
-      actor: e.a === 'p' ? 'player' : 'mob', result: e.r, damage: e.d, ...s};
+      actor: e.a === 'p' ? 'player' : 'mob', result: e.r, damage: e.d, ...s, entry_method: e.v || 'typed'};
     lines.push(COLS.map(c => esc(row[c])).join(','));
   }
   const who = (cur()?.contributor || 'anon').replace(/[^\w-]+/g,'_');
